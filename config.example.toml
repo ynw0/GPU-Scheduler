@@ -11,6 +11,7 @@ docker_socket = "/var/run/docker.sock"
 state_directory = "/var/lib/gpu-scheduler"
 sample_interval_seconds = 2
 reconcile_interval_seconds = 5
+allowed_mount_roots = ["/data", "/workspace"]
 
 [security]
 master_key_path = "/etc/gpu-scheduler/master.key"
@@ -22,4 +23,3 @@ password_min_length = 12
 raw_metric_days = 7
 rollup_metric_days = 90
 backup_count = 14
-

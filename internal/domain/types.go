@@ -94,12 +94,26 @@ type GPU struct {
 	Healthy     bool   `json:"healthy"`
 }
 
+type ImageInfo struct {
+	ID         string    `json:"id"`
+	Repository string    `json:"repository"`
+	Tag        string    `json:"tag"`
+	SizeBytes  int64     `json:"sizeBytes"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
 type Topology struct {
 	Hostname   string       `json:"hostname"`
 	CPUs       []LogicalCPU `json:"cpus"`
 	NUMANodes  []NUMANode   `json:"numaNodes"`
 	GPUs       []GPU        `json:"gpus"`
 	ObservedAt time.Time    `json:"observedAt"`
+}
+
+type Availability struct {
+	CPUIds       []int          `json:"cpuIds"`
+	GPUUUIDs     []string       `json:"gpuUuids"`
+	MemoryByNUMA map[int]uint64 `json:"memoryByNuma"`
 }
 
 type ResourceRequest struct {
@@ -123,8 +137,21 @@ type JobSpec struct {
 
 type WorkloadSpec struct {
 	Kind             WorkloadKind          `json:"kind"`
-	Image            *ImageWorkload        `json:"image,omitempty"`
-	Compose          *ComposeWorkload      `json:"compose,omitempty"`
+	Image            string                `json:"image,omitempty"`
+	Command          []string              `json:"command,omitempty"`
+	Entrypoint       []string              `json:"entrypoint,omitempty"`
+	WorkingDirectory string                `json:"workingDirectory,omitempty"`
+	Environment      map[string]string     `json:"environment,omitempty"`
+	Mounts           []Mount               `json:"mounts,omitempty"`
+	ComposeSourceID  string                `json:"composeSourceId,omitempty"`
+	Services         []ComposeService      `json:"services,omitempty"`
+}
+
+func (w WorkloadSpec) AsImage() ImageWorkload {
+	return ImageWorkload{
+		Image: w.Image, Command: w.Command, Entrypoint: w.Entrypoint,
+		WorkingDirectory: w.WorkingDirectory, Environment: w.Environment, Mounts: w.Mounts,
+	}
 }
 
 type ImageWorkload struct {
@@ -182,6 +209,6 @@ type Allocation struct {
 	ServiceName  string          `json:"serviceName,omitempty"`
 	ResourceType string          `json:"resourceType"`
 	ResourceID   string          `json:"resourceId"`
+	AmountBytes  uint64          `json:"amountBytes,omitempty"`
 	State        AllocationState `json:"state"`
 }
-

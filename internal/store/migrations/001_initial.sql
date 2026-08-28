@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS allocations (
     service_name TEXT NOT NULL DEFAULT '',
     resource_type TEXT NOT NULL CHECK (resource_type IN ('cpu','gpu','memory_node')),
     resource_id TEXT NOT NULL,
+    amount_bytes INTEGER NOT NULL DEFAULT 0 CHECK (amount_bytes >= 0),
     state TEXT NOT NULL CHECK (state IN ('RESERVED','ACTIVE','RELEASING','RELEASED')),
     created_at TEXT NOT NULL,
     released_at TEXT
@@ -103,7 +104,7 @@ CREATE TABLE IF NOT EXISTS allocations (
 
 CREATE UNIQUE INDEX IF NOT EXISTS allocations_exclusive_resource
 ON allocations(resource_type, resource_id)
-WHERE state IN ('RESERVED','ACTIVE','RELEASING');
+WHERE resource_type IN ('cpu','gpu') AND state IN ('RESERVED','ACTIVE','RELEASING');
 
 CREATE TABLE IF NOT EXISTS effective_specs (
     id TEXT PRIMARY KEY,
@@ -183,4 +184,3 @@ CREATE TABLE IF NOT EXISTS notification_deliveries (
     next_attempt_at TEXT,
     last_error TEXT
 );
-

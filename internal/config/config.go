@@ -29,6 +29,7 @@ type Agent struct {
 	StateDirectory           string `toml:"state_directory"`
 	SampleIntervalSeconds    int    `toml:"sample_interval_seconds"`
 	ReconcileIntervalSeconds int    `toml:"reconcile_interval_seconds"`
+	AllowedMountRoots        []string `toml:"allowed_mount_roots"`
 }
 
 type Security struct {
@@ -82,4 +83,3 @@ func (c Config) SampleInterval() time.Duration {
 func (c Config) ReconcileInterval() time.Duration {
 	return time.Duration(c.Agent.ReconcileIntervalSeconds) * time.Second
 }
-
