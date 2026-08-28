@@ -34,7 +34,8 @@ Controller 不持有 Docker socket。Agent 只接受狭窄的结构化操作，�
 
 - `domain`：任务、资源、拓扑、分配、配额、队列和状态机类型。
 - `scheduler`：自动分配、手动验证、Strict NUMA、配额和并发预约。
-- `inventory`：CPU、NUMA、GPU 和 Docker 实际状态。
+- `inventory`：CPU 列表解析。
+- `host`：Linux 上的 CPU、NUMA、GPU 拓扑发现（NVML）。
 - `executor`：Image 与 Compose 生命周期。
 - `monitor`：指标、聚合、告警和训练心跳。
 - `reconcile`：期望状态与实际状态对账。

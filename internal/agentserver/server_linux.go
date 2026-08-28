@@ -9,12 +9,12 @@ import (
 
 	"gpu-scheduler/internal/config"
 	"gpu-scheduler/internal/executor"
-	"gpu-scheduler/internal/inventory"
+	"gpu-scheduler/internal/host"
 	"gpu-scheduler/internal/monitor"
 )
 
 type Server struct {
-	discoverer *inventory.LinuxDiscoverer
+	discoverer *host.LinuxDiscoverer
 	docker     *executor.Docker
 	compose    *executor.Compose
 	validator  *executor.SecurityValidator
@@ -30,7 +30,7 @@ func New(cfg config.Config) (*Server, error) {
 	collector, err := monitor.NewLinuxCollector()
 	if err != nil { docker.Close(); return nil, err }
 	s := &Server{
-		discoverer: inventory.NewLinuxDiscoverer(), docker: docker, validator: validator,
+		discoverer: host.NewLinuxDiscoverer(), docker: docker, validator: validator,
 		compose: executor.NewCompose(docker, validator, cfg.Agent.StateDirectory), monitor: collector,
 		mux: http.NewServeMux(),
 	}

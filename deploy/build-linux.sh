@@ -17,8 +17,8 @@ pnpm run build
 
 cd "$repo_root"
 go mod download
-CGO_ENABLED=1 go build -trimpath -ldflags="-s -w" -o "$output_dir/gpu-scheduler-controller" ./cmd/controller
+CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$output_dir/gpu-scheduler-controller" ./cmd/controller
 CGO_ENABLED=1 go build -trimpath -ldflags="-s -w" -o "$output_dir/gpu-scheduler-agent" ./cmd/agent
-CGO_ENABLED=1 go build -trimpath -ldflags="-s -w" -o "$output_dir/gpu-scheduler-admin" ./cmd/admin
+CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$output_dir/gpu-scheduler-admin" ./cmd/admin
 
 echo "Binaries written to $output_dir"

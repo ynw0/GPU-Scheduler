@@ -1,6 +1,6 @@
 //go:build linux
 
-package inventory
+package host
 
 import (
 	"encoding/json"
@@ -17,6 +17,7 @@ import (
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
 
 	"gpu-scheduler/internal/domain"
+	"gpu-scheduler/internal/inventory"
 )
 
 type LinuxDiscoverer struct {
@@ -78,7 +79,7 @@ func (d *LinuxDiscoverer) discoverNUMA() ([]domain.NUMANode, map[int]int, error)
 		if err != nil {
 			return nil, nil, fmt.Errorf("read node%d cpulist: %w", id, err)
 		}
-		cpuIDs, err := ParseCPUList(cpuList)
+		cpuIDs, err := inventory.ParseCPUList(cpuList)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -118,7 +119,7 @@ func (d *LinuxDiscoverer) discoverCPUs(cpuToNode map[int]int) ([]domain.LogicalC
 		if err != nil {
 			return nil, fmt.Errorf("read cpu%d siblings: %w", id, err)
 		}
-		siblings, err := ParseCPUList(siblingText)
+		siblings, err := inventory.ParseCPUList(siblingText)
 		if err != nil {
 			return nil, err
 		}
@@ -218,4 +219,3 @@ func readNUMAMemory(path string) (uint64, error) {
 	}
 	return 0, errors.New("MemTotal not found")
 }
-

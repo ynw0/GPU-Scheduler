@@ -62,13 +62,15 @@ func (s *ReservationService) Create(ctx context.Context, input CreateInput) (Res
 		Spec: input.Spec, IdempotencyKey: input.IdempotencyKey, CreatedAt: now, UpdatedAt: now,
 	}
 	if aggregate.Schedulable { job.State = domain.JobReserved }
+	var teamID any
+	if job.TeamID != "" { teamID = job.TeamID }
 	err = s.store.Immediate(ctx, func(conn *sql.Conn) error {
 		specJSON, err := json.Marshal(input.Spec)
 		if err != nil { return err }
 		_, err = conn.ExecContext(ctx, `INSERT INTO jobs
             (id,name,owner_id,team_id,state,priority,spec_json,idempotency_key,bypass_count,created_at,updated_at)
             VALUES(?,?,?,?,?,?,?,?,0,?,?)`,
-			job.ID, job.Name, job.OwnerID, nullable(job.TeamID), job.State, job.Priority,
+			job.ID, job.Name, job.OwnerID, teamID, job.State, job.Priority,
 			string(specJSON), job.IdempotencyKey, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 		if err != nil { return err }
 		if job.State != domain.JobReserved { return nil }
