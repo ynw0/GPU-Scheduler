@@ -1,0 +1,24 @@
+# Build outputs
+bin/
+dist/
+web/dist/
+coverage/
+
+# Dependencies
+web/node_modules/
+
+# Runtime state and secrets
+data/
+*.db
+*.db-shm
+*.db-wal
+*.log
+*.key
+.env
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
