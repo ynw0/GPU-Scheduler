@@ -8,6 +8,9 @@ GPU Scheduler 是面向单台 Linux AI 训练服务器的 Docker 资源调度平
 - [系统架构](ARCHITECTURE.md)
 - [实施计划](IMPLEMENTATION_PLAN.md)
 - [API 规范](api/openapi.yaml)
+- [Linux 部署](DEPLOYMENT.md)
+- [运维手册](OPERATIONS.md)
+- [安全模型](SECURITY.md)
 
 ## 技术基线
 
@@ -27,4 +30,3 @@ GPU Scheduler 是面向单台 Linux AI 训练服务器的 Docker 资源调度平
 - Caddy：提供局域网 HTTPS。
 
 Controller 与 Agent 只通过本机 Unix Socket 通信，Agent 不监听 TCP。
-

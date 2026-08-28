@@ -1,0 +1,23 @@
+[Unit]
+Description=GPU Scheduler privileged agent
+After=docker.service network.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=root
+Group=gpu-scheduler
+UMask=0007
+RuntimeDirectory=gpu-scheduler
+RuntimeDirectoryMode=0750
+ExecStart=/opt/gpu-scheduler/bin/gpu-scheduler-agent -config /etc/gpu-scheduler/config.toml
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=false
+ProtectHome=true
+PrivateTmp=true
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+

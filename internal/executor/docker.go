@@ -3,6 +3,7 @@ package executor
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -116,6 +117,14 @@ func (d *Docker) RemoveContainer(ctx context.Context, containerID string) error 
 	return err
 }
 
+func (d *Docker) Logs(ctx context.Context, containerID string, follow bool) (io.ReadCloser, error) {
+	result, err := d.client.ContainerLogs(ctx, containerID, client.ContainerLogsOptions{
+		ShowStdout: true, ShowStderr: true, Follow: follow, Tail: "200",
+	})
+	if err != nil { return nil, err }
+	return result, nil
+}
+
 func (d *Docker) ContainersForProject(ctx context.Context, project string) (map[string]string, error) {
 	filter := client.Filters{}.Add("label", "com.docker.compose.project="+project)
 	response, err := d.client.ContainerList(ctx, client.ContainerListOptions{All: true, Filters: filter})
@@ -138,7 +147,7 @@ func (d *Docker) DiscoverContainerClaims(ctx context.Context) ([]domain.Containe
 		info := inspect.Container
 		claim := domain.ContainerClaim{
 			ContainerID: item.ID, Name: strings.TrimPrefix(firstName(item.Names), "/"), Image: item.Image,
-			State: item.State, ManagedJobID: item.Labels[LabelJobID],
+			State: item.State, ExitCode: int(info.State.ExitCode), ManagedJobID: item.Labels[LabelJobID],
 		}
 		if info.HostConfig.CpusetCpus == "" {
 			claim.CPUUnbounded = true

@@ -42,6 +42,17 @@ func NewService(store *store.Store, idleTimeout, absoluteTTL time.Duration, minP
 	return &Service{store: store, idleTimeout: idleTimeout, absoluteTTL: absoluteTTL, minPassword: minPassword}
 }
 
+func (s *Service) CreateUser(ctx context.Context, username, email, password string, role domain.Role, teamID string) (Identity, error) {
+	if len(password) < s.minPassword { return Identity{}, errors.New("password is shorter than configured minimum") }
+	hash, err := HashPassword(password)
+	if err != nil { return Identity{}, err }
+	id := uuid.NewString()
+	if err := s.store.CreateUser(ctx, store.UserRecord{
+		ID: id, Username: username, Email: email, PasswordHash: hash, Role: role, TeamID: teamID,
+	}); err != nil { return Identity{}, err }
+	return Identity{UserID: id, Username: username, Role: role, TeamID: teamID}, nil
+}
+
 func (s *Service) BootstrapAdmin(ctx context.Context, username, email, password string) error {
 	if len(password) < s.minPassword { return errors.New("password is shorter than configured minimum") }
 	hash, err := HashPassword(password)

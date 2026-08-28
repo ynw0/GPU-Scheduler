@@ -1,4 +1,7 @@
-import type { Availability, Health, Job, Topology, User } from './types'
+import type {
+  AuditEvent, Availability, ComposeSource, Health, ImageInfo, Job, JobPlan, JobSpec,
+  Notification, Quota, Team, Template, Topology, User,
+} from './types'
 
 export class APIError extends Error {
   constructor(public status: number, detail: string) { super(detail) }
@@ -7,6 +10,17 @@ export class APIError extends Error {
 function csrfToken(): string {
   const item = document.cookie.split('; ').find((cookie) => cookie.startsWith('gpu_scheduler_csrf='))
   return item ? decodeURIComponent(item.split('=')[1]) : ''
+}
+
+async function mutate<T>(path: string, method: string, value?: unknown, headers?: Record<string, string>): Promise<T> {
+  const response = await fetch(`/api/v1${path}`, {
+    method, credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken(), ...headers },
+    body: value === undefined ? undefined : JSON.stringify(value),
+  })
+  if (!response.ok) throw new APIError(response.status, await response.text())
+  if (response.status === 204) return undefined as T
+  return response.json() as Promise<T>
 }
 
 async function request<T>(path: string): Promise<T> {
@@ -41,4 +55,22 @@ export const api = {
   topology: () => request<Topology>('/topology'),
   availability: () => request<Availability>('/resources/availability'),
   jobs: () => request<Job[]>('/jobs'),
+  job: (id: string) => request<Job>(`/jobs/${id}`),
+  images: () => request<ImageInfo[]>('/images'),
+  composeSources: () => request<ComposeSource[]>('/compose-sources'),
+  templates: () => request<Template[]>('/templates'),
+  teams: () => request<Team[]>('/teams'),
+  users: () => request<User[]>('/users'),
+  quotas: () => request<Quota[]>('/quotas'),
+  auditEvents: () => request<AuditEvent[]>('/audit-events'),
+  notifications: () => request<Notification[]>('/notifications'),
+  planJob: (spec: JobSpec) => mutate<JobPlan>('/job-plans', 'POST', spec),
+  createJob: (spec: JobSpec) => mutate<Job>('/jobs', 'POST', spec, { 'Idempotency-Key': crypto.randomUUID() }),
+  jobAction: (id: string, action: 'start' | 'stop' | 'cancel' | 'retry') => mutate<Job>(`/jobs/${id}/actions/${action}`, 'POST'),
+  createComposeSource: (value: { name: string; rootPath: string; entryFile: string }) => mutate<ComposeSource>('/compose-sources', 'POST', value),
+  createTeam: (name: string) => mutate<Team>('/teams', 'POST', { name }),
+  createUser: (value: { username: string; password: string; role: User['role']; email?: string; teamId?: string }) => mutate<User>('/users', 'POST', value),
+  upsertQuota: (value: Quota) => mutate<Quota>('/quotas', 'POST', value),
+  createTemplate: (name: string, spec: JobSpec) => mutate<Template>('/templates', 'POST', { name, spec }),
+  markNotificationRead: (id: string) => mutate<void>(`/notifications/${id}`, 'PATCH'),
 }

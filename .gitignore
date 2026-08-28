@@ -1,11 +1,13 @@
 # Build outputs
-bin/
-dist/
-web/dist/
+/bin/
+/dist/
+/web/dist/
 coverage/
+.tools/
 
 # Dependencies
 **/node_modules/
+**/.pnpm-store/
 
 # Runtime state and secrets
 data/

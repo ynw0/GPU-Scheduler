@@ -9,6 +9,8 @@ export interface User {
   username: string
   role: 'Viewer' | 'User' | 'TeamOperator' | 'Admin' | 'Auditor'
   teamId?: string
+  email?: string
+  disabled?: boolean
 }
 
 export interface LogicalCPU {
@@ -38,7 +40,6 @@ export interface GPU {
   memoryUsedBytes?: number
   temperatureCelsius?: number
   powerWatts?: number
-  allocation?: { jobId: string; jobName: string }
 }
 
 export interface Topology {
@@ -63,4 +64,124 @@ export interface Job {
   ownerId: string
   createdAt: string
   updatedAt: string
+  spec?: JobSpec
+  allocations?: Allocation[]
+  attempt?: JobAttempt
+  heartbeat?: { phase: string; epoch?: number; step?: number; progress?: number }
+}
+
+export interface Allocation {
+  id: string
+  jobId: string
+  serviceName?: string
+  resourceType: string
+  resourceId: string
+  amountBytes?: number
+  state: string
+}
+
+export interface JobAttempt {
+  id: string
+  state: string
+  kind?: string
+  containerIds?: Record<string, string>
+}
+
+export interface ImageInfo {
+  id: string
+  repository: string
+  tag: string
+  sizeBytes: number
+  createdAt: string
+}
+
+export interface ResourceRequest {
+  cpuMode: 'auto-cores' | 'manual-threads'
+  cpuCount: number
+  cpuIds?: number[]
+  gpuMode: 'auto' | 'manual'
+  gpuCount: number
+  gpuUuids?: string[]
+  memoryBytes: number
+  numaPolicy: 'strict'
+}
+
+export interface JobSpec {
+  name: string
+  priority: 'P0' | 'P1' | 'P2' | 'P3'
+  workload: ImageWorkload | ComposeWorkload
+  resources: ResourceRequest
+  stopGraceSeconds: number
+}
+
+export interface ImageWorkload {
+  kind: 'image'
+  image: string
+  command: string[]
+  workingDirectory?: string
+}
+
+export interface ComposeWorkload {
+  kind: 'compose'
+  composeSourceId: string
+  services: Array<{ name: string; class: 'training' | 'auxiliary'; resources: ResourceRequest }>
+}
+
+export interface JobPlan {
+  schedulable: boolean
+  cpuIds: number[]
+  gpuUuids: string[]
+  numaNodes: number[]
+  conflicts: string[]
+  warnings: string[]
+}
+
+export interface ComposeSource {
+  id: string
+  name: string
+  rootPath: string
+  entryFile: string
+  enabled: boolean
+}
+
+export interface Team {
+  id: string
+  name: string
+  createdAt: string
+}
+
+export interface Quota {
+  id: string
+  scopeType: 'team' | 'user'
+  scopeId: string
+  gpuLimit: number
+  cpuThreadLimit: number
+  memoryBytesLimit: number
+}
+
+export interface Template {
+  id: string
+  name: string
+  ownerId: string
+  spec: JobSpec
+  updatedAt: string
+}
+
+export interface Notification {
+  id: string
+  severity: string
+  title: string
+  body: string
+  readAt?: string
+  createdAt: string
+}
+
+export interface AuditEvent {
+  id: string
+  actorUserId?: string
+  action: string
+  targetType: string
+  targetId: string
+  detail?: string
+  createdAt: string
 }

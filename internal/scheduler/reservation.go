@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"gpu-scheduler/internal/domain"
+	"gpu-scheduler/internal/quota"
 	"gpu-scheduler/internal/store"
 )
 
@@ -32,6 +33,7 @@ type ReservationResult struct {
 	Job          domain.Job
 	Plan         domain.JobPlan
 	ServicePlans map[string]domain.JobPlan
+	Created      bool
 }
 
 func NewReservationService(store *store.Store, engine *Engine) *ReservationService {
@@ -45,19 +47,22 @@ func (s *ReservationService) Preview(topology domain.Topology, availability doma
 
 func (s *ReservationService) Create(ctx context.Context, input CreateInput) (ReservationResult, error) {
 	aggregate, servicePlans := s.planWorkload(input.Topology, input.Availability, input.Spec)
-	if !aggregate.Schedulable { return ReservationResult{Plan: aggregate}, fmt.Errorf("resource plan is not schedulable") }
+	if err := s.checkQuota(ctx, input, aggregate); err != nil {
+		return ReservationResult{Plan: domain.JobPlan{Conflicts: []string{err.Error()}}}, err
+	}
+	existing, err := s.store.FindJobByIdempotency(ctx, input.OwnerID, input.IdempotencyKey)
+	if err == nil {
+		return ReservationResult{Job: existing, Plan: aggregate, ServicePlans: servicePlans}, nil
+	}
+	if !store.IsNotFound(err) { return ReservationResult{}, err }
 	now := time.Now().UTC()
 	job := domain.Job{
-		ID: uuid.NewString(), Name: input.Spec.Name, State: domain.JobReserved,
+		ID: uuid.NewString(), Name: input.Spec.Name, State: domain.JobQueued,
 		Priority: input.Spec.Priority, OwnerID: input.OwnerID, TeamID: input.TeamID,
 		Spec: input.Spec, IdempotencyKey: input.IdempotencyKey, CreatedAt: now, UpdatedAt: now,
 	}
-	err := s.store.Immediate(ctx, func(conn *sql.Conn) error {
-		var existing string
-		err := conn.QueryRowContext(ctx,
-			"SELECT id FROM jobs WHERE owner_id=? AND idempotency_key=?", input.OwnerID, input.IdempotencyKey).Scan(&existing)
-		if err == nil { return fmt.Errorf("idempotency key already belongs to job %s", existing) }
-		if err != sql.ErrNoRows { return err }
+	if aggregate.Schedulable { job.State = domain.JobReserved }
+	err = s.store.Immediate(ctx, func(conn *sql.Conn) error {
 		specJSON, err := json.Marshal(input.Spec)
 		if err != nil { return err }
 		_, err = conn.ExecContext(ctx, `INSERT INTO jobs
@@ -66,13 +71,77 @@ func (s *ReservationService) Create(ctx context.Context, input CreateInput) (Res
 			job.ID, job.Name, job.OwnerID, nullable(job.TeamID), job.State, job.Priority,
 			string(specJSON), job.IdempotencyKey, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 		if err != nil { return err }
+		if job.State != domain.JobReserved { return nil }
 		for serviceName, plan := range servicePlans {
 			request := resourceRequestForService(input.Spec, serviceName)
 			if err := reservePlan(ctx, conn, job.ID, serviceName, plan, request, input.Topology, now); err != nil { return err }
 		}
 		return nil
 	})
+	return ReservationResult{Job: job, Plan: aggregate, ServicePlans: servicePlans, Created: true}, err
+}
+
+func (s *ReservationService) Promote(ctx context.Context, job domain.Job, topology domain.Topology, availability domain.Availability) (ReservationResult, error) {
+	aggregate, servicePlans := s.planWorkload(topology, availability, job.Spec)
+	if !aggregate.Schedulable { return ReservationResult{Job: job, Plan: aggregate, ServicePlans: servicePlans}, fmt.Errorf("resource plan is not schedulable") }
+	if err := s.checkQuota(ctx, CreateInput{OwnerID: job.OwnerID, TeamID: job.TeamID, Spec: job.Spec}, aggregate); err != nil {
+		return ReservationResult{Job: job, Plan: aggregate}, err
+	}
+	now := time.Now().UTC()
+	err := s.store.Immediate(ctx, func(conn *sql.Conn) error {
+		var state string
+		if err := conn.QueryRowContext(ctx, "SELECT state FROM jobs WHERE id=?", job.ID).Scan(&state); err != nil { return err }
+		if state != string(domain.JobQueued) { return fmt.Errorf("job %s is %s, not QUEUED", job.ID, state) }
+		if _, err := conn.ExecContext(ctx, "UPDATE jobs SET state=?,bypass_count=0,updated_at=? WHERE id=? AND state=?",
+			domain.JobReserved, now.Format(time.RFC3339Nano), job.ID, domain.JobQueued); err != nil {
+			return err
+		}
+		for serviceName, plan := range servicePlans {
+			request := resourceRequestForService(job.Spec, serviceName)
+			if err := reservePlan(ctx, conn, job.ID, serviceName, plan, request, topology, now); err != nil { return err }
+		}
+		return nil
+	})
+	job.State = domain.JobReserved
+	job.UpdatedAt = now
 	return ReservationResult{Job: job, Plan: aggregate, ServicePlans: servicePlans}, err
+}
+
+func (s *ReservationService) checkQuota(ctx context.Context, input CreateInput, plan domain.JobPlan) error {
+	userLimit, _, err := s.store.QuotaFor(ctx, "user", input.OwnerID)
+	if err != nil { return err }
+	teamLimit := quota.Limit{GPUCount: -1, CPUThreadCount: -1}
+	if input.TeamID != "" {
+		teamLimit, _, err = s.store.QuotaFor(ctx, "team", input.TeamID)
+		if err != nil { return err }
+	}
+	userUsage, teamUsage, err := s.store.QuotaUsage(ctx, input.OwnerID, input.TeamID)
+	if err != nil { return err }
+	threads := len(plan.CPUIds)
+	if threads == 0 { threads = requestedCPUThreads(input.Spec) }
+	request := input.Spec.Resources
+	if input.Spec.Workload.Kind == domain.WorkloadCompose {
+		request = domain.ResourceRequest{}
+		for _, service := range input.Spec.Workload.Services {
+			request.GPUCount += service.Resources.GPUCount
+			request.MemoryBytes += service.Resources.MemoryBytes
+		}
+	}
+	conflicts := quota.Check(request, threads, teamLimit, userLimit, teamUsage, userUsage)
+	if len(conflicts) > 0 { return fmt.Errorf("%s", conflicts[0]) }
+	return nil
+}
+
+func requestedCPUThreads(spec domain.JobSpec) int {
+	if spec.Workload.Kind == domain.WorkloadCompose {
+		total := 0
+		for _, service := range spec.Workload.Services {
+			if service.Resources.CPUMode == domain.CPUManualThreads { total += len(service.Resources.CPUIds) } else { total += service.Resources.CPUCount }
+		}
+		return total
+	}
+	if spec.Resources.CPUMode == domain.CPUManualThreads { return len(spec.Resources.CPUIds) }
+	return spec.Resources.CPUCount
 }
 
 func (s *ReservationService) planWorkload(topology domain.Topology, availability domain.Availability, spec domain.JobSpec) (domain.JobPlan, map[string]domain.JobPlan) {
@@ -181,4 +250,22 @@ func nodeCapacity(topology domain.Topology, nodeID int) uint64 {
 	return 0
 }
 
-func nullable(value string) any { if value == "" { return nil }; return value }
+func IntersectPool(availability domain.Availability, pool domain.ResourcePool) domain.Availability {
+	cpuAllow, gpuAllow := intSet(pool.CPUIds), stringSet(pool.GPUUUIDs)
+	result := domain.Availability{MemoryByNUMA: make(map[int]uint64)}
+	for _, id := range availability.CPUIds {
+		if _, ok := cpuAllow[id]; ok { result.CPUIds = append(result.CPUIds, id) }
+	}
+	for _, uuid := range availability.GPUUUIDs {
+		if _, ok := gpuAllow[uuid]; ok { result.GPUUUIDs = append(result.GPUUUIDs, uuid) }
+	}
+	if len(pool.NUMANodes) == 0 {
+		result.MemoryByNUMA = availability.MemoryByNUMA
+		return result
+	}
+	nodeAllow := intSet(pool.NUMANodes)
+	for node, memory := range availability.MemoryByNUMA {
+		if _, ok := nodeAllow[node]; ok { result.MemoryByNUMA[node] = memory }
+	}
+	return result
+}

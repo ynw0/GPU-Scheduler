@@ -168,6 +168,22 @@ paths:
             schema: { $ref: "#/components/schemas/TrainingHeartbeat" }
       responses:
         "204": { description: Heartbeat recorded }
+  /jobs/{jobId}/metrics:
+    get:
+      operationId: getJobMetrics
+      parameters: [ { $ref: "#/components/parameters/JobId" } ]
+      responses:
+        "200": { description: Recent job metric snapshots }
+  /jobs/{jobId}/logs/stream:
+    get:
+      operationId: streamJobLogs
+      parameters: [ { $ref: "#/components/parameters/JobId" } ]
+      responses:
+        "200":
+          description: Container log stream
+          content:
+            text/event-stream:
+              schema: { type: string }
   /events/stream:
     get:
       operationId: streamEvents
@@ -177,6 +193,69 @@ paths:
           content:
             text/event-stream:
               schema: { type: string }
+  /compose-sources:
+    get:
+      operationId: listComposeSources
+      responses:
+        "200":
+          description: Registered Compose sources
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/ComposeSource" } }
+    post:
+      operationId: createComposeSource
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ComposeSourceWrite" }
+      responses:
+        "201": { description: Created }
+  /templates:
+    get:
+      operationId: listTemplates
+      responses:
+        "200": { description: Job templates }
+    post:
+      operationId: createTemplate
+      responses:
+        "201": { description: Created }
+  /teams:
+    get:
+      operationId: listTeams
+      responses: { "200": { description: Teams } }
+    post:
+      operationId: createTeam
+      responses: { "201": { description: Created } }
+  /users:
+    get:
+      operationId: listUsers
+      responses: { "200": { description: Users } }
+    post:
+      operationId: createUser
+      responses: { "201": { description: Created } }
+  /quotas:
+    get:
+      operationId: listQuotas
+      responses: { "200": { description: Quotas } }
+    post:
+      operationId: upsertQuota
+      responses: { "200": { description: Saved } }
+  /resource-pools:
+    get:
+      operationId: listResourcePools
+      responses: { "200": { description: Resource pools } }
+    post:
+      operationId: createResourcePool
+      responses: { "201": { description: Created } }
+  /audit-events:
+    get:
+      operationId: listAuditEvents
+      responses: { "200": { description: Audit events } }
+  /notifications:
+    get:
+      operationId: listNotifications
+      responses: { "200": { description: Notifications } }
 components:
   securitySchemes:
     sessionCookie:
@@ -341,6 +420,7 @@ components:
             - { $ref: "#/components/schemas/ComposeWorkload" }
           discriminator: { propertyName: kind }
         resources: { $ref: "#/components/schemas/ResourceRequest" }
+        resourcePoolId: { type: string, format: uuid }
         stopGraceSeconds: { type: integer, minimum: 1, maximum: 600, default: 30 }
     JobPlan:
       type: object
@@ -390,3 +470,12 @@ components:
         status: { type: integer }
         detail: { type: string }
         conflicts: { type: array, items: { type: string } }
+    ComposeSource:
+      type: object
+      required: [id, name, rootPath, entryFile, enabled]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        rootPath: { type: string }
+        entryFile: { type: string }
+        enabled: { type: boolean }

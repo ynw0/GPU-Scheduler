@@ -5,7 +5,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
+
+	"github.com/google/uuid"
 
 	"gpu-scheduler/internal/domain"
 )
@@ -81,6 +84,84 @@ func (s *Store) RecordHeartbeat(ctx context.Context, jobID, phase string, epoch,
         VALUES(?,?,?,?,?,?) ON CONFLICT(job_id) DO UPDATE SET
         phase=excluded.phase,epoch=excluded.epoch,step=excluded.step,progress=excluded.progress,reported_at=excluded.reported_at`,
 		jobID, phase, epoch, step, progress, time.Now().UTC().Format(time.RFC3339Nano))
+	return err
+}
+
+func (s *Store) GetHeartbeat(ctx context.Context, jobID string) (domain.TrainingStatus, error) {
+	var status domain.TrainingStatus
+	var reported string
+	err := s.db.QueryRowContext(ctx, `SELECT phase,epoch,step,progress,reported_at FROM training_heartbeats WHERE job_id=?`, jobID).
+		Scan(&status.Phase, &status.Epoch, &status.Step, &status.Progress, &reported)
+	if err != nil { return domain.TrainingStatus{}, err }
+	status.ReportedAt, _ = time.Parse(time.RFC3339Nano, reported)
+	return status, nil
+}
+
+func (s *Store) ListJobsByState(ctx context.Context, states ...domain.JobState) ([]domain.Job, error) {
+	if len(states) == 0 { return nil, nil }
+	placeholders := make([]string, len(states))
+	args := make([]any, len(states))
+	for i, state := range states {
+		placeholders[i] = "?"
+		args[i] = state
+	}
+	query := `SELECT id,name,state,priority,owner_id,COALESCE(team_id,''),spec_json,bypass_count,created_at,updated_at
+        FROM jobs WHERE state IN (` + strings.Join(placeholders, ",") + `) ORDER BY priority ASC, created_at ASC`
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil { return nil, err }
+	defer rows.Close()
+	var jobs []domain.Job
+	for rows.Next() {
+		job, err := scanJob(rows)
+		if err != nil { return nil, err }
+		jobs = append(jobs, job)
+	}
+	return jobs, rows.Err()
+}
+
+func (s *Store) AllocationsForJob(ctx context.Context, jobID string) ([]domain.Allocation, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id,job_id,service_name,resource_type,resource_id,amount_bytes,state
+        FROM allocations WHERE job_id=? ORDER BY resource_type, resource_id`, jobID)
+	if err != nil { return nil, err }
+	defer rows.Close()
+	var result []domain.Allocation
+	for rows.Next() {
+		var item domain.Allocation
+		if err := rows.Scan(&item.ID, &item.JobID, &item.ServiceName, &item.ResourceType, &item.ResourceID, &item.AmountBytes, &item.State); err != nil {
+			return nil, err
+		}
+		result = append(result, item)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) IncrementBypass(ctx context.Context, jobID string) error {
+	_, err := s.db.ExecContext(ctx, "UPDATE jobs SET bypass_count=bypass_count+1,updated_at=? WHERE id=?",
+		time.Now().UTC().Format(time.RFC3339Nano), jobID)
+	return err
+}
+
+func (s *Store) ResetBypass(ctx context.Context, jobID string) error {
+	_, err := s.db.ExecContext(ctx, "UPDATE jobs SET bypass_count=0,updated_at=? WHERE id=?",
+		time.Now().UTC().Format(time.RFC3339Nano), jobID)
+	return err
+}
+
+func (s *Store) FindJobByIdempotency(ctx context.Context, ownerID, key string) (domain.Job, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT id,name,state,priority,owner_id,COALESCE(team_id,''),spec_json,bypass_count,created_at,updated_at
+        FROM jobs WHERE owner_id=? AND idempotency_key=?`, ownerID, key)
+	return scanJob(row)
+}
+
+func (s *Store) InsertAudit(ctx context.Context, actorID, action, targetType, targetID, detail string) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO audit_events(id,actor_user_id,action,target_type,target_id,detail_json,created_at)
+        VALUES(?,?,?,?,?,?,?)`, uuid.NewString(), nullText(actorID), action, targetType, targetID, detail, time.Now().UTC().Format(time.RFC3339Nano))
+	return err
+}
+
+func (s *Store) InsertJobEvent(ctx context.Context, jobID, eventType, payload string) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO job_events(id,job_id,event_type,payload_json,created_at) VALUES(?,?,?,?,?)`,
+		uuid.NewString(), jobID, eventType, payload, time.Now().UTC().Format(time.RFC3339Nano))
 	return err
 }
 

@@ -1,0 +1,14 @@
+[Unit]
+Description=Backup GPU Scheduler SQLite database
+After=gpu-scheduler-controller.service
+
+[Service]
+Type=oneshot
+User=gpu-scheduler
+Group=gpu-scheduler
+ExecStart=/opt/gpu-scheduler/bin/gpu-scheduler-backup
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/gpu-scheduler
+

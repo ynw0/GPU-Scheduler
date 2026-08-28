@@ -126,3 +126,32 @@ func readGPUMetrics() ([]domain.GPUMetric, error) {
 	return result, nil
 }
 
+func (c *LinuxCollector) HostOccupiedGPUs() ([]string, error) {
+	count, ret := nvml.DeviceGetCount()
+	if ret != nvml.SUCCESS { return nil, fmt.Errorf("GPU count: %s", nvml.ErrorString(ret)) }
+	var occupied []string
+	for index := 0; index < count; index++ {
+		device, ret := nvml.DeviceGetHandleByIndex(index)
+		if ret != nvml.SUCCESS { return nil, fmt.Errorf("GPU %d: %s", index, nvml.ErrorString(ret)) }
+		uuid, ret := device.GetUUID()
+		if ret != nvml.SUCCESS { return nil, fmt.Errorf("GPU %d UUID", index) }
+		processes, ret := device.GetComputeRunningProcesses()
+		if ret != nvml.SUCCESS { continue }
+		for _, process := range processes {
+			if process.Pid == 0 { continue }
+			if !pidInContainer(int(process.Pid)) {
+				occupied = append(occupied, uuid)
+				break
+			}
+		}
+	}
+	return occupied, nil
+}
+
+func pidInContainer(pid int) bool {
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/cgroup", pid))
+	if err != nil { return false }
+	text := string(data)
+	return strings.Contains(text, "docker") || strings.Contains(text, "containerd") || strings.Contains(text, "libpod")
+}
+

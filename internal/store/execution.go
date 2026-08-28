@@ -2,11 +2,13 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
 
+	"gpu-scheduler/internal/domain"
 	"gpu-scheduler/internal/executor"
 )
 
@@ -46,4 +48,29 @@ func (s *Store) GetComposeSource(ctx context.Context, id string) (executor.Compo
 	err := s.db.QueryRowContext(ctx, `SELECT id,root_path,entry_file FROM compose_sources WHERE id=? AND enabled=1`, id).
 		Scan(&source.ID, &source.RootPath, &source.EntryFile)
 	return source, err
+}
+
+func (s *Store) LatestAttempt(ctx context.Context, jobID string) (domain.JobAttempt, error) {
+	var attempt domain.JobAttempt
+	var runtimeJSON, createdAt string
+	var finishedAt sql.NullString
+	err := s.db.QueryRowContext(ctx, `SELECT id,job_id,attempt_number,state,COALESCE(runtime_ref,''),created_at,finished_at
+        FROM job_attempts WHERE job_id=? ORDER BY attempt_number DESC LIMIT 1`, jobID).
+		Scan(&attempt.ID, &attempt.JobID, &attempt.AttemptNumber, &attempt.State, &runtimeJSON, &createdAt, &finishedAt)
+	if err != nil { return domain.JobAttempt{}, err }
+	if runtimeJSON != "" {
+		var runtime executor.RuntimeRef
+		if err := json.Unmarshal([]byte(runtimeJSON), &runtime); err != nil { return domain.JobAttempt{}, err }
+		attempt.Kind, attempt.Project, attempt.ContainerIDs = runtime.Kind, runtime.Project, runtime.ContainerIDs
+	}
+	attempt.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAt)
+	if finishedAt.Valid {
+		parsed, _ := time.Parse(time.RFC3339Nano, finishedAt.String)
+		attempt.FinishedAt = &parsed
+	}
+	return attempt, nil
+}
+
+func RuntimeFromAttempt(attempt domain.JobAttempt) executor.RuntimeRef {
+	return executor.RuntimeRef{Kind: attempt.Kind, Project: attempt.Project, ContainerIDs: attempt.ContainerIDs}
 }

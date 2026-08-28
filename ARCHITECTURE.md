@@ -84,7 +84,7 @@ docker compose start
 - Agent Unix Socket 权限 `0660`，仅 Controller 服务组可访问。
 - 禁止 privileged、Docker socket、宿主根挂载、未授权 devices、`SYS_ADMIN`、host PID/IPC/cgroup 和 `use_api_socket`。
 - Compose 宿主路径必须位于管理员登记的 allowlist。
-- Secret 使用 `/etc/gpu-scheduler/master.key` 加密，文件权限 `0600`。
+- Secret 使用 `/etc/gpu-scheduler/master.key` 加密，文件权限 `root:gpu-scheduler 0640`。
 - 所有启动、停止、强制终止、权限、资源和 Compose 变更写入审计日志。
 
 ## 生产目录
@@ -97,4 +97,3 @@ docker compose start
 /var/lib/gpu-scheduler/effective-specs/
 /var/lib/gpu-scheduler/backups/
 ```
-

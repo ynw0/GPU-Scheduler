@@ -44,7 +44,8 @@ func main() {
 		cfg.Security.PasswordMinLength)
 	notifier := notification.NewWorker(db, cfg.Notifications, time.Duration(cfg.Controller.WebhookTimeoutSeconds)*time.Second)
 	go notifier.Run(ctx)
-	app := controller.New(log, db, agent, authService, notifier)
+	app := controller.New(log, cfg, db, agent, authService, notifier)
+	go app.Start(ctx)
 	httpServer := &http.Server{
 		Addr:              cfg.Controller.ListenAddress,
 		Handler:           app.Handler(),

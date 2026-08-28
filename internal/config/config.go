@@ -22,6 +22,7 @@ type Controller struct {
 	DatabasePath          string `toml:"database_path"`
 	AgentSocket           string `toml:"agent_socket"`
 	WebhookTimeoutSeconds int    `toml:"webhook_timeout_seconds"`
+	ReservedCPUIds        []int  `toml:"reserved_cpu_ids"`
 }
 
 type Agent struct {

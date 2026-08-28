@@ -6,15 +6,15 @@ var allowedTransitions = map[JobState]map[JobState]struct{}{
 	JobDraft:     {JobQueued: {}, JobReserved: {}, JobCanceled: {}},
 	JobQueued:    {JobReserved: {}, JobCanceled: {}},
 	JobReserved:  {JobCreating: {}, JobQueued: {}, JobFailed: {}, JobCanceled: {}},
-	JobCreating:  {JobStarting: {}, JobFailed: {}},
-	JobStarting:  {JobRunning: {}, JobFailed: {}, JobDegraded: {}},
+	JobCreating:  {JobStarting: {}, JobFailed: {}, JobCanceled: {}},
+	JobStarting:  {JobRunning: {}, JobFailed: {}, JobDegraded: {}, JobCanceled: {}},
 	JobRunning:   {JobStopping: {}, JobSucceeded: {}, JobFailed: {}, JobDrifted: {}, JobDegraded: {}},
 	JobStopping:  {JobSucceeded: {}, JobFailed: {}, JobCanceled: {}},
 	JobDrifted:   {JobRunning: {}, JobStopping: {}, JobFailed: {}, JobOrphaned: {}},
 	JobDegraded:  {JobRunning: {}, JobStopping: {}, JobFailed: {}, JobOrphaned: {}},
 	JobOrphaned:  {JobFailed: {}, JobCanceled: {}},
 	JobSucceeded: {},
-	JobFailed:    {},
+	JobFailed:    {JobQueued: {}},
 	JobCanceled:  {},
 }
 

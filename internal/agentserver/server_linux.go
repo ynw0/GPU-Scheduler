@@ -4,6 +4,7 @@ package agentserver
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 
 	"gpu-scheduler/internal/config"
@@ -52,6 +53,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /internal/v1/container-claims", s.claims)
 	s.mux.HandleFunc("POST /internal/v1/workloads/image", s.createImage)
 	s.mux.HandleFunc("POST /internal/v1/workloads/compose", s.createCompose)
+	s.mux.HandleFunc("POST /internal/v1/workloads/stop", s.stopWorkload)
+	s.mux.HandleFunc("POST /internal/v1/workloads/remove", s.removeAttempt)
+	s.mux.HandleFunc("GET /internal/v1/workloads/logs", s.logs)
+	s.mux.HandleFunc("GET /internal/v1/gpu-host-processes", s.hostGPUProcesses)
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
@@ -102,6 +107,40 @@ func (s *Server) createCompose(w http.ResponseWriter, r *http.Request) {
 	ref, err := s.compose.CreateAndStart(r.Context(), body.Request, effective)
 	if err != nil { writeError(w, err); return }
 	writeJSON(w, 201, map[string]any{"runtime": ref, "effective": effective})
+}
+
+func (s *Server) stopWorkload(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Runtime        executor.RuntimeRef `json:"runtime"`
+		TimeoutSeconds int                 `json:"timeoutSeconds"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil { writeJSON(w, 400, map[string]string{"error": err.Error()}); return }
+	if err := s.docker.Stop(r.Context(), body.Runtime, body.TimeoutSeconds); err != nil { writeError(w, err); return }
+	w.WriteHeader(204)
+}
+
+func (s *Server) removeAttempt(w http.ResponseWriter, r *http.Request) {
+	var body struct{ AttemptID string `json:"attemptId"` }
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil { writeJSON(w, 400, map[string]string{"error": err.Error()}); return }
+	if err := s.docker.RemoveAttempt(r.Context(), body.AttemptID); err != nil { writeError(w, err); return }
+	w.WriteHeader(204)
+}
+
+func (s *Server) logs(w http.ResponseWriter, r *http.Request) {
+	containerID := r.URL.Query().Get("containerId")
+	if containerID == "" { writeJSON(w, 400, map[string]string{"error": "containerId required"}); return }
+	reader, err := s.docker.Logs(r.Context(), containerID, r.URL.Query().Get("follow") == "1")
+	if err != nil { writeError(w, err); return }
+	defer reader.Close()
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.WriteHeader(200)
+	_, _ = io.Copy(w, reader)
+}
+
+func (s *Server) hostGPUProcesses(w http.ResponseWriter, _ *http.Request) {
+	uuids, err := s.monitor.HostOccupiedGPUs()
+	if err != nil { writeError(w, err); return }
+	writeJSON(w, 200, uuids)
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

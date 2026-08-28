@@ -1,0 +1,26 @@
+[Unit]
+Description=GPU Scheduler controller
+After=gpu-scheduler-agent.service network.target
+Requires=gpu-scheduler-agent.service
+
+[Service]
+Type=simple
+User=gpu-scheduler
+Group=gpu-scheduler
+UMask=0027
+ExecStart=/opt/gpu-scheduler/bin/gpu-scheduler-controller -config /etc/gpu-scheduler/config.toml
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/gpu-scheduler /run/gpu-scheduler
+ReadOnlyPaths=/etc/gpu-scheduler
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target
+

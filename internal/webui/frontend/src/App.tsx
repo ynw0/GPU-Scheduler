@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Activity,
@@ -18,10 +18,11 @@ import {
   Settings,
   ShieldCheck,
   TerminalSquare,
-  Users,
   Zap,
 } from 'lucide-react'
 import { api } from './api'
+import { AdminPage } from './AdminPage'
+import { NewJobDialog } from './JobDialog'
 import type { GPU, Job, LogicalCPU, NUMANode, Topology } from './types'
 
 type Section = 'overview' | 'jobs' | 'queue' | 'templates' | 'admin'
@@ -43,18 +44,47 @@ function statusLabel(status: string): string {
   const labels: Record<string, string> = {
     RUNNING: '运行中', QUEUED: '排队中', RESERVED: '已预约', FAILED: '失败',
     SUCCEEDED: '已完成', CREATING: '创建中', STARTING: '启动中', STOPPING: '停止中',
+    CANCELED: '已取消', DRIFTED: '漂移', ORPHANED: '孤儿', DEGRADED: '降级',
   }
   return labels[status] ?? status
 }
 
 export function App() {
+  const queryClient = useQueryClient()
   const [section, setSection] = useState<Section>('overview')
+  const [newJobOpen, setNewJobOpen] = useState(false)
+  const [selectedJobId, setSelectedJobId] = useState<string>()
+  const [notifyOpen, setNotifyOpen] = useState(false)
   const me = useQuery({ queryKey: ['me'], queryFn: api.me, retry: false, refetchInterval: false })
   const authenticated = Boolean(me.data)
   const health = useQuery({ queryKey: ['health'], queryFn: api.health })
   const topology = useQuery({ queryKey: ['topology'], queryFn: api.topology, enabled: authenticated })
   const availability = useQuery({ queryKey: ['availability'], queryFn: api.availability, enabled: authenticated })
   const jobs = useQuery({ queryKey: ['jobs'], queryFn: api.jobs, enabled: authenticated })
+  const notifications = useQuery({ queryKey: ['notifications'], queryFn: api.notifications, enabled: authenticated })
+  const templates = useQuery({ queryKey: ['templates'], queryFn: api.templates, enabled: authenticated && section === 'templates' })
+  const selectedJob = useQuery({ queryKey: ['job', selectedJobId], queryFn: () => api.job(selectedJobId!), enabled: Boolean(selectedJobId) })
+
+  useEffect(() => {
+    if (!authenticated) return
+    const source = new EventSource('/api/v1/events/stream', { withCredentials: true })
+    const refresh = () => {
+      void queryClient.invalidateQueries({ queryKey: ['jobs'] })
+      void queryClient.invalidateQueries({ queryKey: ['availability'] })
+      void queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    }
+    source.addEventListener('job', refresh)
+    source.addEventListener('metrics', () => { void queryClient.invalidateQueries({ queryKey: ['topology'] }) })
+    return () => source.close()
+  }, [authenticated, queryClient])
+
+  const action = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: 'start' | 'stop' | 'cancel' | 'retry' }) => api.jobAction(id, name),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['jobs'] })
+      if (selectedJobId) void queryClient.invalidateQueries({ queryKey: ['job', selectedJobId] })
+    },
+  })
 
   if (me.isLoading) return <BootScreen />
   if (!me.data) return <LoginScreen />
@@ -87,7 +117,9 @@ export function App() {
           })}
         </nav>
         <div className="rail-bottom">
-          <button className="rail-item" title="通知"><Bell size={19} /><span>通知</span></button>
+          <button className={notifyOpen ? 'rail-item active' : 'rail-item'} title="通知" onClick={() => setNotifyOpen((value) => !value)}>
+            <Bell size={19} /><span>通知</span>
+          </button>
           <button className="rail-item" title="设置"><Settings size={19} /><span>设置</span></button>
           <div className="avatar" title={`${me.data.username} · ${me.data.role}`}>{me.data.username.slice(0, 2).toUpperCase()}</div>
         </div>
@@ -107,7 +139,7 @@ export function App() {
             <button className="icon-button" onClick={() => void topology.refetch()} aria-label="刷新">
               <RefreshCw size={17} />
             </button>
-            <button className="primary-action"><Plus size={17} />新建任务</button>
+            <button className="primary-action" onClick={() => setNewJobOpen(true)}><Plus size={17} />新建任务</button>
           </div>
         </header>
 
@@ -128,8 +160,54 @@ export function App() {
             queueCount={queued.length}
           />
         )}
-        {section !== 'overview' && <SectionPlaceholder section={section} jobs={jobs.data ?? []} />}
+        {section !== 'overview' && (
+          <SectionContent
+            section={section}
+            jobs={jobs.data ?? []}
+            role={me.data.role}
+            templates={templates.data ?? []}
+            onOpenJob={setSelectedJobId}
+            onAction={(id, name) => action.mutate({ id, name })}
+          />
+        )}
       </main>
+      {newJobOpen && <NewJobDialog topology={topology.data} onClose={() => setNewJobOpen(false)} />}
+      {notifyOpen && (
+        <aside className="notify-drawer">
+          <header><p className="eyebrow">NOTIFICATIONS</p><h3>站内通知</h3></header>
+          {(notifications.data ?? []).map((item) => (
+            <button className={item.readAt ? 'notify-item read' : 'notify-item'} key={item.id} onClick={() => { void api.markNotificationRead(item.id); void queryClient.invalidateQueries({ queryKey: ['notifications'] }) }}>
+              <strong>{item.title}</strong><span>{item.body}</span>
+            </button>
+          ))}
+          {!(notifications.data ?? []).length && <div className="empty-row">暂无通知</div>}
+        </aside>
+      )}
+      {selectedJob.data && (
+        <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedJobId(undefined) }}>
+          <section className="job-dialog" style={{ width: 720, maxHeight: '80vh' }}>
+            <header className="dialog-header">
+              <div><p className="eyebrow">JOB DETAIL</p><h2>{selectedJob.data.name}</h2></div>
+              <button className="icon-button" onClick={() => setSelectedJobId(undefined)}>×</button>
+            </header>
+            <div className="dialog-body" style={{ gridTemplateColumns: '1fr', minHeight: 280 }}>
+              <div className="form-column">
+                <p>状态 {statusLabel(selectedJob.data.state)} · 优先级 {selectedJob.data.priority}</p>
+                {selectedJob.data.heartbeat && <p>训练阶段 {selectedJob.data.heartbeat.phase}</p>}
+                {(selectedJob.data.allocations ?? []).map((item) => (
+                  <div className="plan-line" key={item.id}><span>{item.resourceType}</span><strong>{item.resourceId}</strong></div>
+                ))}
+                <div className="dialog-actions">
+                  {selectedJob.data.state === 'QUEUED' && <button className="secondary-action" onClick={() => action.mutate({ id: selectedJob.data!.id, name: 'start' })}>立即调度</button>}
+                  {selectedJob.data.state === 'RUNNING' && <button className="secondary-action" onClick={() => action.mutate({ id: selectedJob.data!.id, name: 'stop' })}>停止</button>}
+                  {['QUEUED', 'RESERVED', 'RUNNING', 'CREATING', 'STARTING'].includes(selectedJob.data.state) && <button className="secondary-action" onClick={() => action.mutate({ id: selectedJob.data!.id, name: 'cancel' })}>取消</button>}
+                  {selectedJob.data.state === 'FAILED' && <button className="primary-action" onClick={() => action.mutate({ id: selectedJob.data!.id, name: 'retry' })}>重试</button>}
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   )
 }
@@ -324,7 +402,211 @@ function EmptyTopology() {
   return <div className="empty-topology"><Box size={28} /><strong>等待真实拓扑</strong><span>Agent 上线后，这里将按 NUMA 节点显示 CPU 与 GPU。</span></div>
 }
 
-function SectionPlaceholder({ section, jobs }: { section: Section; jobs: Job[] }) {
+function SectionContent({
+  section, jobs, role, templates, onOpenJob, onAction,
+}: {
+  section: Section
+  jobs: Job[]
+  role: import('./types').User['role']
+  templates: import('./types').Template[]
+  onOpenJob: (id: string) => void
+  onAction: (id: string, name: 'start' | 'stop' | 'cancel' | 'retry') => void
+}) {
+  if (section === 'admin') return <AdminPage role={role} />
+  if (section === 'templates') {
+    return (
+      <section className="workload-page overview-enter">
+        <div className="section-heading">
+          <div><p className="eyebrow">TEMPLATES</p><h2>任务模板</h2></div>
+          <span className="module-count">{templates.length} 项</span>
+        </div>
+        <div className="full-job-table">
+          {templates.map((item) => (
+            <div className="full-job-row" key={item.id}>
+              <span>{item.name}</span>
+              <span>{item.spec.workload.kind}</span>
+              <span className="muted">{new Date(item.updatedAt).toLocaleString('zh-CN')}</span>
+            </div>
+          ))}
+          {!templates.length && <div className="empty-row"><Boxes size={22} /><span>还没有模板</span></div>}
+        </div>
+      </section>
+    )
+  }
+  const visible = section === 'queue' ? jobs.filter((job) => job.state === 'QUEUED') : jobs
+  return (
+    <section className="workload-page overview-enter">
+      <div className="section-heading">
+        <div><p className="eyebrow">{section === 'queue' ? 'SCHEDULER QUEUE' : 'WORKLOAD REGISTRY'}</p><h2>{section === 'queue' ? '等待调度' : '全部训练任务'}</h2></div>
+        <span className="module-count">{visible.length} 项</span>
+      </div>
+      <div className="full-job-table">
+        <div className="full-job-row header"><span>任务</span><span>状态</span><span>优先级</span><span>创建时间</span><span>操作</span></div>
+        {visible.map((job) => (
+          <div className="full-job-row" key={job.id} style={{ cursor: 'pointer' }} onClick={() => onOpenJob(job.id)}>
+            <span className="job-name"><i />{job.name}<small>{job.id.slice(0, 8)}</small></span>
+            <span><b className={`status-pill status-${job.state.toLowerCase()}`}>{statusLabel(job.state)}</b></span>
+            <span className="priority">{job.priority}</span>
+            <span className="muted">{new Date(job.createdAt).toLocaleString('zh-CN')}</span>
+            <span>
+              {job.state === 'RUNNING' && <button className="text-button" onClick={(event) => { event.stopPropagation(); onAction(job.id, 'stop') }}>停止</button>}
+              {job.state === 'QUEUED' && <button className="text-button" onClick={(event) => { event.stopPropagation(); onAction(job.id, 'cancel') }}>取消</button>}
+              {job.state === 'FAILED' && <button className="text-button" onClick={(event) => { event.stopPropagation(); onAction(job.id, 'retry') }}>重试</button>}
+            </span>
+          </div>
+        ))}
+        {!visible.length && <div className="empty-row"><ListOrdered size={22} /><span>{section === 'queue' ? '队列为空' : '当前没有可见任务'}</span></div>}
+      </div>
+    </section>
+  )
+}
+
+/* duplicate dialog removed
+function NewJobDialog({ topology, onClose }: { topology?: Topology; onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const images = useQuery({ queryKey: ['images'], queryFn: api.images, refetchInterval: false })
+  const [name, setName] = useState('')
+  const [image, setImage] = useState('')
+  const [command, setCommand] = useState('python\ntrain.py')
+  const [workingDirectory, setWorkingDirectory] = useState('/workspace')
+  const [priority, setPriority] = useState<JobSpec['priority']>('P2')
+  const [gpuMode, setGpuMode] = useState<ResourceRequest['gpuMode']>('auto')
+  const [gpuCount, setGpuCount] = useState(1)
+  const [selectedGPUs, setSelectedGPUs] = useState<string[]>([])
+  const [cpuMode, setCpuMode] = useState<ResourceRequest['cpuMode']>('auto-cores')
+  const [cpuCount, setCpuCount] = useState(8)
+  const [selectedCPUs, setSelectedCPUs] = useState<number[]>([])
+  const [memoryGB, setMemoryGB] = useState(64)
+  const [plan, setPlan] = useState<JobPlan>()
+  const [planKey, setPlanKey] = useState('')
+
+  const buildSpec = (): JobSpec => ({
+    name, priority,
+    workload: {
+      kind: 'image', image,
+      command: command.split('\n').map((item) => item.trim()).filter(Boolean),
+      workingDirectory,
+    },
+    resources: {
+      cpuMode, cpuCount: cpuMode === 'manual-threads' ? selectedCPUs.length : cpuCount,
+      cpuIds: cpuMode === 'manual-threads' ? selectedCPUs : undefined,
+      gpuMode, gpuCount: gpuMode === 'manual' ? selectedGPUs.length : gpuCount,
+      gpuUuids: gpuMode === 'manual' ? selectedGPUs : undefined,
+      memoryBytes: memoryGB * 1024 ** 3, numaPolicy: 'strict',
+    },
+    stopGraceSeconds: 30,
+  })
+
+  const preview = useMutation({
+    mutationFn: () => api.planJob(buildSpec()),
+    onSuccess: (nextPlan) => { setPlan(nextPlan); setPlanKey(JSON.stringify(buildSpec())) },
+  })
+  const create = useMutation({
+    mutationFn: () => api.createJob(buildSpec()),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['jobs'] }),
+        queryClient.invalidateQueries({ queryKey: ['availability'] }),
+      ])
+      onClose()
+    },
+  })
+
+  const toggleGPU = (uuid: string) => setSelectedGPUs((current) => current.includes(uuid) ? current.filter((item) => item !== uuid) : [...current, uuid])
+  const toggleCPU = (id: number) => setSelectedCPUs((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
+  const ready = name.trim() && image && command.trim() && memoryGB > 0
+  const planCurrent = planKey === JSON.stringify(buildSpec())
+
+  return (
+    <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+      <section className="job-dialog" role="dialog" aria-modal="true" aria-labelledby="new-job-title">
+        <header className="dialog-header">
+          <div><p className="eyebrow">NEW WORKLOAD / IMAGE</p><h2 id="new-job-title">创建训练任务</h2></div>
+          <button className="icon-button" onClick={onClose} aria-label="关闭"><X size={18} /></button>
+        </header>
+        <div className="dialog-body">
+          <div className="form-column">
+            <fieldset>
+              <legend>01 / 基本信息</legend>
+              <div className="field-grid two">
+                <label>任务名称<input value={name} onChange={(event) => setName(event.target.value)} placeholder="experiment-a800-01" /></label>
+                <label>优先级<select value={priority} onChange={(event) => setPriority(event.target.value as JobSpec['priority'])}><option>P2</option><option>P3</option><option>P1</option><option>P0</option></select></label>
+              </div>
+              <label>本机镜像<select value={image} onChange={(event) => setImage(event.target.value)}><option value="">选择 Docker Image</option>{(images.data ?? []).map((item) => <option key={`${item.id}-${item.tag}`} value={`${item.repository}:${item.tag}`}>{item.repository}:{item.tag} · {formatBytes(item.sizeBytes)}</option>)}</select></label>
+              <div className="field-grid two">
+                <label>工作目录<input value={workingDirectory} onChange={(event) => setWorkingDirectory(event.target.value)} /></label>
+                <label>内存限制（GB）<input type="number" min={1} value={memoryGB} onChange={(event) => setMemoryGB(Number(event.target.value))} /></label>
+              </div>
+              <label>启动 argv <small>每行一个参数，不经过 Shell</small><textarea value={command} onChange={(event) => setCommand(event.target.value)} rows={4} /></label>
+            </fieldset>
+
+            <fieldset>
+              <legend>02 / GPU 与 NUMA</legend>
+              <div className="mode-switch"><button className={gpuMode === 'auto' ? 'active' : ''} onClick={() => { setGpuMode('auto'); setPlan(undefined) }}>自动分配</button><button className={gpuMode === 'manual' ? 'active' : ''} onClick={() => { setGpuMode('manual'); setPlan(undefined) }}>手动整卡</button></div>
+              {gpuMode === 'auto' ? <label>GPU 数量<input type="number" min={0} max={topology?.gpus.length ?? 8} value={gpuCount} onChange={(event) => setGpuCount(Number(event.target.value))} /></label> :
+                <div className="resource-choice-grid">{(topology?.gpus ?? []).map((gpu) => <button key={gpu.uuid} className={selectedGPUs.includes(gpu.uuid) ? 'resource-choice selected' : 'resource-choice'} onClick={() => toggleGPU(gpu.uuid)}><span>GPU {gpu.index}</span><small>NUMA {gpu.numaNode}</small>{selectedGPUs.includes(gpu.uuid) && <Check size={14} />}</button>)}</div>}
+            </fieldset>
+
+            <fieldset>
+              <legend>03 / CPU</legend>
+              <div className="mode-switch"><button className={cpuMode === 'auto-cores' ? 'active' : ''} onClick={() => { setCpuMode('auto-cores'); setPlan(undefined) }}>完整物理核</button><button className={cpuMode === 'manual-threads' ? 'active' : ''} onClick={() => { setCpuMode('manual-threads'); setPlan(undefined) }}>高级线程选择</button></div>
+              {cpuMode === 'auto-cores' ? <label>物理核数量<input type="number" min={1} value={cpuCount} onChange={(event) => setCpuCount(Number(event.target.value))} /></label> :
+                <div className="thread-choice-grid">{(topology?.cpus ?? []).map((cpu) => <button disabled={!cpu.allocatable} key={cpu.id} className={selectedCPUs.includes(cpu.id) ? 'thread-choice selected' : 'thread-choice'} onClick={() => toggleCPU(cpu.id)}>{cpu.id}<small>N{cpu.numaNode}</small></button>)}</div>}
+            </fieldset>
+          </div>
+
+          <aside className="plan-column">
+            <p className="eyebrow">EFFECTIVE PLAN</p>
+            <h3>资源预检</h3>
+            {!plan && <div className="plan-empty"><CircleGauge size={30} /><span>填写资源后执行预检，提交时平台会在事务中再次计算。</span></div>}
+            {plan && <>
+              <div className={plan.schedulable ? 'plan-status ok' : 'plan-status error'}>{plan.schedulable ? <Check size={17} /> : <X size={17} />}{plan.schedulable ? '资源可调度' : '存在资源冲突'}</div>
+              <PlanLine icon={Gauge} label="GPU" value={plan.gpuUuids.length ? `${plan.gpuUuids.length} 张整卡` : '无'} />
+              <PlanLine icon={Cpu} label="CPU" value={`${plan.cpuIds.length} 线程`} />
+              <PlanLine icon={LayoutGrid} label="NUMA" value={plan.numaNodes.join(', ') || '—'} />
+              <PlanLine icon={HardDrive} label="内存" value={`${memoryGB} GB`} />
+              {plan.conflicts.map((conflict) => <div className="plan-conflict" key={conflict}>{conflict}</div>)}
+            </>}
+            {plan && !planCurrent && <div className="plan-conflict">配置已经变化，请重新执行资源预检。</div>}
+            {(preview.error || create.error) && <div className="plan-conflict">请求失败：{String((preview.error ?? create.error)?.message)}</div>}
+            <div className="dialog-actions">
+              <button className="secondary-action" disabled={!ready || preview.isPending} onClick={() => preview.mutate()}>{preview.isPending ? '计算中…' : '资源预检'}</button>
+              <button className="primary-action" disabled={!plan?.schedulable || !planCurrent || create.isPending} onClick={() => create.mutate()}>{create.isPending ? '正在提交…' : '提交任务'}</button>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function PlanLine({ icon: Icon, label, value }: { icon: typeof Gauge; label: string; value: string }) {
+  return <div className="plan-line"><span><Icon size={15} />{label}</span><strong>{value}</strong></div>
+}
+
+function SectionContent({ section, jobs }: { section: Section; jobs: Job[] }) {
+  if (section === 'jobs' || section === 'queue') {
+    const visible = section === 'queue' ? jobs.filter((job) => job.state === 'QUEUED') : jobs
+    return (
+      <section className="workload-page overview-enter">
+        <div className="section-heading">
+          <div><p className="eyebrow">{section === 'queue' ? 'SCHEDULER QUEUE' : 'WORKLOAD REGISTRY'}</p><h2>{section === 'queue' ? '等待调度' : '全部训练任务'}</h2></div>
+          <span className="module-count">{visible.length} 项</span>
+        </div>
+        <div className="full-job-table">
+          <div className="full-job-row header"><span>任务</span><span>状态</span><span>优先级</span><span>创建时间</span><span>更新时间</span></div>
+          {visible.map((job) => <div className="full-job-row" key={job.id}>
+            <span className="job-name"><i />{job.name}<small>{job.id.slice(0, 8)}</small></span>
+            <span><b className={`status-pill status-${job.state.toLowerCase()}`}>{statusLabel(job.state)}</b></span>
+            <span className="priority">{job.priority}</span>
+            <span className="muted">{new Date(job.createdAt).toLocaleString('zh-CN')}</span>
+            <span className="muted">{new Date(job.updatedAt).toLocaleString('zh-CN')}</span>
+          </div>)}
+          {!visible.length && <div className="empty-row"><ListOrdered size={22} /><span>{section === 'queue' ? '队列为空' : '当前没有可见任务'}</span></div>}
+        </div>
+      </section>
+    )
+  }
   const config = {
     jobs: ['训练任务', '集中查看任务生命周期、资源分配与训练阶段。', TerminalSquare],
     queue: ['调度队列', '按优先级、提交时间与防饥饿规则管理等待任务。', ListOrdered],
@@ -343,3 +625,4 @@ function SectionPlaceholder({ section, jobs }: { section: Section; jobs: Job[] }
     </section>
   )
 }
+*/

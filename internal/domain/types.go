@@ -132,6 +132,7 @@ type JobSpec struct {
 	Priority         Priority        `json:"priority"`
 	Workload         WorkloadSpec    `json:"workload"`
 	Resources        ResourceRequest `json:"resources"`
+	ResourcePoolID   string          `json:"resourcePoolId,omitempty"`
 	StopGraceSeconds int             `json:"stopGraceSeconds"`
 }
 
@@ -233,13 +234,120 @@ type HostMetricSnapshot struct {
 }
 
 type ContainerClaim struct {
-	ContainerID string   `json:"containerId"`
-	Name        string   `json:"name"`
-	Image       string   `json:"image"`
-	State       string   `json:"state"`
-	ManagedJobID string  `json:"managedJobId,omitempty"`
-	CPUIds      []int    `json:"cpuIds"`
-	GPUUUIDs    []string `json:"gpuUuids"`
-	CPUUnbounded bool    `json:"cpuUnbounded"`
-	GPUUnbounded bool    `json:"gpuUnbounded"`
+	ContainerID  string   `json:"containerId"`
+	Name         string   `json:"name"`
+	Image        string   `json:"image"`
+	State        string   `json:"state"`
+	ExitCode     int      `json:"exitCode,omitempty"`
+	ManagedJobID string   `json:"managedJobId,omitempty"`
+	CPUIds       []int    `json:"cpuIds"`
+	GPUUUIDs     []string `json:"gpuUuids"`
+	CPUUnbounded bool     `json:"cpuUnbounded"`
+	GPUUnbounded bool     `json:"gpuUnbounded"`
+}
+
+type JobAttempt struct {
+	ID            string            `json:"id"`
+	JobID         string            `json:"jobId"`
+	AttemptNumber int               `json:"attemptNumber"`
+	State         string            `json:"state"`
+	Kind          string            `json:"kind,omitempty"`
+	Project       string            `json:"project,omitempty"`
+	ContainerIDs  map[string]string `json:"containerIds,omitempty"`
+	CreatedAt     time.Time         `json:"createdAt"`
+	FinishedAt    *time.Time        `json:"finishedAt,omitempty"`
+}
+
+type JobDetail struct {
+	Job
+	Allocations []Allocation     `json:"allocations"`
+	Attempt     *JobAttempt      `json:"attempt,omitempty"`
+	Heartbeat   *TrainingStatus  `json:"heartbeat,omitempty"`
+}
+
+type TrainingStatus struct {
+	Phase      string    `json:"phase"`
+	Epoch      *int      `json:"epoch,omitempty"`
+	Step       *int      `json:"step,omitempty"`
+	Progress   *float64  `json:"progress,omitempty"`
+	ReportedAt time.Time `json:"reportedAt"`
+}
+
+type Team struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+type Quota struct {
+	ID               string `json:"id"`
+	ScopeType        string `json:"scopeType"`
+	ScopeID          string `json:"scopeId"`
+	GPULimit         int    `json:"gpuLimit"`
+	CPUThreadLimit   int    `json:"cpuThreadLimit"`
+	MemoryBytesLimit uint64 `json:"memoryBytesLimit"`
+}
+
+type ComposeSource struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	RootPath  string    `json:"rootPath"`
+	EntryFile string    `json:"entryFile"`
+	Enabled   bool      `json:"enabled"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+type Template struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	OwnerID   string    `json:"ownerId"`
+	Spec      JobSpec   `json:"spec"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+type ResourcePool struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	CPUIds    []int     `json:"cpuIds"`
+	GPUUUIDs  []string  `json:"gpuUuids"`
+	NUMANodes []int     `json:"numaNodes"`
+	Shared    bool      `json:"shared"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+type AuditEvent struct {
+	ID         string    `json:"id"`
+	ActorID    string    `json:"actorUserId,omitempty"`
+	Action     string    `json:"action"`
+	TargetType string    `json:"targetType"`
+	TargetID   string    `json:"targetId"`
+	Detail     string    `json:"detail,omitempty"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
+type Notification struct {
+	ID        string     `json:"id"`
+	UserID    string     `json:"userId,omitempty"`
+	Severity  string     `json:"severity"`
+	Title     string     `json:"title"`
+	Body      string     `json:"body"`
+	ReadAt    *time.Time `json:"readAt,omitempty"`
+	CreatedAt time.Time  `json:"createdAt"`
+}
+
+type UserAccount struct {
+	ID        string    `json:"id"`
+	Username  string    `json:"username"`
+	Email     string    `json:"email,omitempty"`
+	Role      Role      `json:"role"`
+	TeamID    string    `json:"teamId,omitempty"`
+	Disabled  bool      `json:"disabled"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+type StreamEvent struct {
+	Type    string `json:"type"`
+	At      string `json:"at"`
+	Payload any    `json:"payload,omitempty"`
 }
