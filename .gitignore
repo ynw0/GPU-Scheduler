@@ -5,7 +5,7 @@ web/dist/
 coverage/
 
 # Dependencies
-web/node_modules/
+**/node_modules/
 
 # Runtime state and secrets
 data/
@@ -21,4 +21,3 @@ data/
 .vscode/
 .DS_Store
 Thumbs.db
-

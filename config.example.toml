@@ -1,0 +1,25 @@
+[controller]
+listen_address = "127.0.0.1:8080"
+public_base_url = "https://scheduler.internal"
+database_path = "/var/lib/gpu-scheduler/scheduler.db"
+agent_socket = "/run/gpu-scheduler/agent.sock"
+webhook_timeout_seconds = 10
+
+[agent]
+socket_path = "/run/gpu-scheduler/agent.sock"
+docker_socket = "/var/run/docker.sock"
+state_directory = "/var/lib/gpu-scheduler"
+sample_interval_seconds = 2
+reconcile_interval_seconds = 5
+
+[security]
+master_key_path = "/etc/gpu-scheduler/master.key"
+session_idle_hours = 12
+session_absolute_hours = 168
+password_min_length = 12
+
+[retention]
+raw_metric_days = 7
+rollup_metric_days = 90
+backup_count = 14
+

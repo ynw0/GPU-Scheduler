@@ -1,0 +1,389 @@
+openapi: 3.1.0
+info:
+  title: GPU Scheduler API
+  version: 1.0.0
+  description: 单机 GPU 训练调度平台公开 API。
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+paths:
+  /health:
+    get:
+      security: []
+      operationId: getHealth
+      responses:
+        "200":
+          description: Controller health
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+  /auth/login:
+    post:
+      security: []
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "204": { description: Authenticated }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /auth/logout:
+    post:
+      operationId: logout
+      responses:
+        "204": { description: Session revoked }
+  /me:
+    get:
+      operationId: getCurrentUser
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+  /topology:
+    get:
+      operationId: getTopology
+      responses:
+        "200":
+          description: Effective host topology
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Topology" }
+  /resources/availability:
+    get:
+      operationId: getResourceAvailability
+      responses:
+        "200":
+          description: Current allocatable resources
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Availability" }
+  /images:
+    get:
+      operationId: listImages
+      responses:
+        "200":
+          description: Images present on the Docker host
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Image" }
+  /unmanaged-containers:
+    get:
+      operationId: listUnmanagedContainers
+      responses:
+        "200":
+          description: Containers not owned by the platform
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/UnmanagedContainer" }
+  /job-plans:
+    post:
+      operationId: planJob
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/JobSpec" }
+      responses:
+        "200":
+          description: Non-reserving scheduling preview
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobPlan" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /jobs:
+    get:
+      operationId: listJobs
+      responses:
+        "200":
+          description: Jobs visible to the current user
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Job" }
+    post:
+      operationId: createJob
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string, minLength: 8, maxLength: 128 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/JobSpec" }
+      responses:
+        "202":
+          description: Job accepted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Job" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /jobs/{jobId}:
+    get:
+      operationId: getJob
+      parameters: [ { $ref: "#/components/parameters/JobId" } ]
+      responses:
+        "200":
+          description: Job detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Job" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /jobs/{jobId}/actions/{action}:
+    post:
+      operationId: actOnJob
+      parameters:
+        - { $ref: "#/components/parameters/JobId" }
+        - in: path
+          name: action
+          required: true
+          schema: { type: string, enum: [start, stop, cancel, retry] }
+      responses:
+        "202": { description: Action accepted }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /jobs/{jobId}/heartbeat:
+    post:
+      operationId: reportTrainingHeartbeat
+      parameters: [ { $ref: "#/components/parameters/JobId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TrainingHeartbeat" }
+      responses:
+        "204": { description: Heartbeat recorded }
+  /events/stream:
+    get:
+      operationId: streamEvents
+      responses:
+        "200":
+          description: Server-sent state and notification events
+          content:
+            text/event-stream:
+              schema: { type: string }
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: gpu_scheduler_session
+  parameters:
+    JobId:
+      in: path
+      name: jobId
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    Conflict:
+      description: State or resource conflict
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Problem" }
+  schemas:
+    Health:
+      type: object
+      required: [status, version, agent]
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        version: { type: string }
+        agent: { type: string, enum: [online, offline] }
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string, minLength: 1 }
+        password: { type: string, minLength: 12 }
+    User:
+      type: object
+      required: [id, username, role]
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+        role: { type: string, enum: [Viewer, User, TeamOperator, Admin, Auditor] }
+        teamId: { type: [string, "null"], format: uuid }
+    Topology:
+      type: object
+      required: [hostname, cpus, numaNodes, gpus, observedAt]
+      properties:
+        hostname: { type: string }
+        cpus:
+          type: array
+          items: { $ref: "#/components/schemas/LogicalCPU" }
+        numaNodes:
+          type: array
+          items: { $ref: "#/components/schemas/NUMANode" }
+        gpus:
+          type: array
+          items: { $ref: "#/components/schemas/GPU" }
+        observedAt: { type: string, format: date-time }
+    LogicalCPU:
+      type: object
+      required: [id, coreId, socketId, numaNode, siblings, allocatable]
+      properties:
+        id: { type: integer, minimum: 0 }
+        coreId: { type: integer, minimum: 0 }
+        socketId: { type: integer, minimum: 0 }
+        numaNode: { type: integer, minimum: 0 }
+        siblings: { type: array, items: { type: integer } }
+        allocatable: { type: boolean }
+    NUMANode:
+      type: object
+      required: [id, memoryBytes, cpuIds]
+      properties:
+        id: { type: integer, minimum: 0 }
+        memoryBytes: { type: integer, minimum: 0 }
+        cpuIds: { type: array, items: { type: integer } }
+    GPU:
+      type: object
+      required: [uuid, index, name, pciBusId, numaNode, memoryBytes, healthy]
+      properties:
+        uuid: { type: string }
+        index: { type: integer, minimum: 0 }
+        name: { type: string }
+        pciBusId: { type: string }
+        numaNode: { type: integer, minimum: 0 }
+        memoryBytes: { type: integer, minimum: 0 }
+        healthy: { type: boolean }
+    Availability:
+      type: object
+      required: [cpuIds, gpuUuids, memoryByNuma]
+      properties:
+        cpuIds: { type: array, items: { type: integer } }
+        gpuUuids: { type: array, items: { type: string } }
+        memoryByNuma:
+          type: object
+          additionalProperties: { type: integer }
+    Image:
+      type: object
+      required: [id, repository, tag, sizeBytes, createdAt]
+      properties:
+        id: { type: string }
+        repository: { type: string }
+        tag: { type: string }
+        sizeBytes: { type: integer }
+        createdAt: { type: string, format: date-time }
+    ResourceRequest:
+      type: object
+      required: [cpuMode, cpuCount, gpuMode, gpuCount, memoryBytes, numaPolicy]
+      properties:
+        cpuMode: { type: string, enum: [auto-cores, manual-threads] }
+        cpuCount: { type: integer, minimum: 0 }
+        cpuIds: { type: array, items: { type: integer } }
+        gpuMode: { type: string, enum: [auto, manual] }
+        gpuCount: { type: integer, minimum: 0 }
+        gpuUuids: { type: array, items: { type: string } }
+        memoryBytes: { type: integer, minimum: 0 }
+        numaPolicy: { const: strict }
+    ImageWorkload:
+      type: object
+      required: [kind, image, command]
+      properties:
+        kind: { const: image }
+        image: { type: string }
+        command: { type: array, items: { type: string } }
+        entrypoint: { type: array, items: { type: string } }
+        workingDirectory: { type: string }
+    ComposeWorkload:
+      type: object
+      required: [kind, composeSourceId, services]
+      properties:
+        kind: { const: compose }
+        composeSourceId: { type: string, format: uuid }
+        services:
+          type: array
+          items:
+            type: object
+            required: [name, class, resources]
+            properties:
+              name: { type: string }
+              class: { type: string, enum: [training, auxiliary] }
+              resources: { $ref: "#/components/schemas/ResourceRequest" }
+    JobSpec:
+      type: object
+      required: [name, priority, workload, resources]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        priority: { type: string, enum: [P0, P1, P2, P3], default: P2 }
+        workload:
+          oneOf:
+            - { $ref: "#/components/schemas/ImageWorkload" }
+            - { $ref: "#/components/schemas/ComposeWorkload" }
+          discriminator: { propertyName: kind }
+        resources: { $ref: "#/components/schemas/ResourceRequest" }
+        stopGraceSeconds: { type: integer, minimum: 1, maximum: 600, default: 30 }
+    JobPlan:
+      type: object
+      required: [schedulable, cpuIds, gpuUuids, numaNodes, conflicts, warnings]
+      properties:
+        schedulable: { type: boolean }
+        cpuIds: { type: array, items: { type: integer } }
+        gpuUuids: { type: array, items: { type: string } }
+        numaNodes: { type: array, items: { type: integer } }
+        conflicts: { type: array, items: { type: string } }
+        warnings: { type: array, items: { type: string } }
+    Job:
+      type: object
+      required: [id, name, state, priority, ownerId, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        state: { type: string }
+        priority: { type: string, enum: [P0, P1, P2, P3] }
+        ownerId: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    TrainingHeartbeat:
+      type: object
+      required: [phase]
+      properties:
+        phase: { type: string, enum: [TRAINING, CHECKPOINTING, EVALUATING] }
+        epoch: { type: integer, minimum: 0 }
+        step: { type: integer, minimum: 0 }
+        progress: { type: number, minimum: 0, maximum: 1 }
+    UnmanagedContainer:
+      type: object
+      required: [id, name, image, state, cpuUnbounded, gpuUnbounded]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        image: { type: string }
+        state: { type: string }
+        cpuUnbounded: { type: boolean }
+        gpuUnbounded: { type: boolean }
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        conflicts: { type: array, items: { type: string } }
+
