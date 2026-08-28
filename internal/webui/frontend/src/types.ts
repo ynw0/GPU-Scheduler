@@ -4,6 +4,13 @@ export interface Health {
   agent: 'online' | 'offline'
 }
 
+export interface User {
+  id: string
+  username: string
+  role: 'Viewer' | 'User' | 'TeamOperator' | 'Admin' | 'Auditor'
+  teamId?: string
+}
+
 export interface LogicalCPU {
   id: number
   coreId: number
@@ -57,4 +64,3 @@ export interface Job {
   createdAt: string
   updatedAt: string
 }
-

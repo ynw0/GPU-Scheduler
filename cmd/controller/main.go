@@ -11,8 +11,10 @@ import (
 	"time"
 
 	"gpu-scheduler/internal/agentapi"
+	"gpu-scheduler/internal/auth"
 	"gpu-scheduler/internal/config"
 	"gpu-scheduler/internal/controller"
+	"gpu-scheduler/internal/notification"
 	"gpu-scheduler/internal/store"
 )
 
@@ -26,7 +28,8 @@ func main() {
 		log.Error("load config", "error", err)
 		os.Exit(1)
 	}
-	ctx := context.Background()
+	ctx, cancelRun := context.WithCancel(context.Background())
+	defer cancelRun()
 	db, err := store.Open(ctx, cfg.Controller.DatabasePath)
 	if err != nil {
 		log.Error("open store", "error", err)
@@ -35,7 +38,13 @@ func main() {
 	defer db.Close()
 
 	agent := agentapi.NewClient(cfg.Controller.AgentSocket)
-	app := controller.New(log, db, agent)
+	authService := auth.NewService(db,
+		time.Duration(cfg.Security.SessionIdleHours)*time.Hour,
+		time.Duration(cfg.Security.SessionAbsoluteHours)*time.Hour,
+		cfg.Security.PasswordMinLength)
+	notifier := notification.NewWorker(db, cfg.Notifications, time.Duration(cfg.Controller.WebhookTimeoutSeconds)*time.Second)
+	go notifier.Run(ctx)
+	app := controller.New(log, db, agent, authService, notifier)
 	httpServer := &http.Server{
 		Addr:              cfg.Controller.ListenAddress,
 		Handler:           app.Handler(),
@@ -53,8 +62,8 @@ func main() {
 		}
 	}()
 	<-stop
+	cancelRun()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	_ = httpServer.Shutdown(shutdownCtx)
 }
-

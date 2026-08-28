@@ -28,7 +28,11 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/LoginRequest" }
       responses:
-        "204": { description: Authenticated }
+        "200":
+          description: Authenticated user; session and CSRF cookies are set
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
         "401": { $ref: "#/components/responses/Unauthorized" }
   /auth/logout:
     post:
@@ -386,4 +390,3 @@ components:
         status: { type: integer }
         detail: { type: string }
         conflicts: { type: array, items: { type: string } }
-

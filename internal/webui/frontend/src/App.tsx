@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Activity,
   Bell,
@@ -49,10 +49,15 @@ function statusLabel(status: string): string {
 
 export function App() {
   const [section, setSection] = useState<Section>('overview')
+  const me = useQuery({ queryKey: ['me'], queryFn: api.me, retry: false, refetchInterval: false })
+  const authenticated = Boolean(me.data)
   const health = useQuery({ queryKey: ['health'], queryFn: api.health })
-  const topology = useQuery({ queryKey: ['topology'], queryFn: api.topology })
-  const availability = useQuery({ queryKey: ['availability'], queryFn: api.availability })
-  const jobs = useQuery({ queryKey: ['jobs'], queryFn: api.jobs })
+  const topology = useQuery({ queryKey: ['topology'], queryFn: api.topology, enabled: authenticated })
+  const availability = useQuery({ queryKey: ['availability'], queryFn: api.availability, enabled: authenticated })
+  const jobs = useQuery({ queryKey: ['jobs'], queryFn: api.jobs, enabled: authenticated })
+
+  if (me.isLoading) return <BootScreen />
+  if (!me.data) return <LoginScreen />
 
   const running = (jobs.data ?? []).filter((job) => job.state === 'RUNNING')
   const queued = (jobs.data ?? []).filter((job) => job.state === 'QUEUED')
@@ -84,7 +89,7 @@ export function App() {
         <div className="rail-bottom">
           <button className="rail-item" title="通知"><Bell size={19} /><span>通知</span></button>
           <button className="rail-item" title="设置"><Settings size={19} /><span>设置</span></button>
-          <div className="avatar">AD</div>
+          <div className="avatar" title={`${me.data.username} · ${me.data.role}`}>{me.data.username.slice(0, 2).toUpperCase()}</div>
         </div>
       </aside>
 
@@ -127,6 +132,46 @@ export function App() {
       </main>
     </div>
   )
+}
+
+function LoginScreen() {
+  const queryClient = useQueryClient()
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const login = useMutation({
+    mutationFn: () => api.login(username, password),
+    onSuccess: (user) => queryClient.setQueryData(['me'], user),
+  })
+  return (
+    <main className="login-shell">
+      <section className="login-intro">
+        <div className="login-brand"><span className="brand-pulse" />GS / CONTROL PLANE</div>
+        <div>
+          <p className="eyebrow">SINGLE-NODE AI ORCHESTRATION</p>
+          <h1>把拓扑变成<br /><em>可调度的秩序。</em></h1>
+          <p>Docker 生命周期、整卡 GPU、CPU 线程与 NUMA 本地性，在同一个控制面中保持一致。</p>
+        </div>
+        <div className="login-signals"><span>CGROUP V2</span><span>NVML</span><span>STRICT NUMA</span><span>RECONCILIATION</span></div>
+      </section>
+      <section className="login-panel">
+        <form onSubmit={(event) => { event.preventDefault(); login.mutate() }}>
+          <p className="eyebrow">AUTHORIZED ACCESS</p>
+          <h2>登录调度平台</h2>
+          <label>用户名<input autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} /></label>
+          <label>密码<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+          {login.isError && <div className="login-error">认证失败，请检查用户名和密码。</div>}
+          <button className="login-submit" type="submit" disabled={login.isPending || !username || !password}>
+            {login.isPending ? '正在认证…' : '进入控制面'}<ChevronRight size={17} />
+          </button>
+          <small>会话通过 Secure / HttpOnly Cookie 建立，所有写操作受 CSRF 保护。</small>
+        </form>
+      </section>
+    </main>
+  )
+}
+
+function BootScreen() {
+  return <main className="boot-screen"><div className="boot-mark">GS</div><span>INITIALIZING CONTROL PLANE</span></main>
 }
 
 function Overview({
@@ -298,4 +343,3 @@ function SectionPlaceholder({ section, jobs }: { section: Section; jobs: Job[] }
     </section>
   )
 }
-

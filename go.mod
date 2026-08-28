@@ -9,5 +9,6 @@ require (
 	github.com/moby/moby/client v0.5.0
 	github.com/NVIDIA/go-nvml v0.13.0-1
 	golang.org/x/crypto v0.41.0
+	golang.org/x/term v0.34.0
 	modernc.org/sqlite v1.39.1
 )

@@ -212,3 +212,34 @@ type Allocation struct {
 	AmountBytes  uint64          `json:"amountBytes,omitempty"`
 	State        AllocationState `json:"state"`
 }
+
+type GPUMetric struct {
+	UUID               string  `json:"uuid"`
+	UtilizationPercent uint32  `json:"utilizationPercent"`
+	MemoryUsedBytes    uint64  `json:"memoryUsedBytes"`
+	MemoryTotalBytes   uint64  `json:"memoryTotalBytes"`
+	TemperatureCelsius uint32  `json:"temperatureCelsius"`
+	PowerWatts         float64 `json:"powerWatts"`
+}
+
+type HostMetricSnapshot struct {
+	SampledAt       time.Time       `json:"sampledAt"`
+	CPUPercentByID  map[int]float64 `json:"cpuPercentById"`
+	MemoryUsedBytes uint64          `json:"memoryUsedBytes"`
+	MemoryTotalBytes uint64         `json:"memoryTotalBytes"`
+	SwapUsedBytes   uint64          `json:"swapUsedBytes"`
+	SwapTotalBytes  uint64          `json:"swapTotalBytes"`
+	GPUs            []GPUMetric     `json:"gpus"`
+}
+
+type ContainerClaim struct {
+	ContainerID string   `json:"containerId"`
+	Name        string   `json:"name"`
+	Image       string   `json:"image"`
+	State       string   `json:"state"`
+	ManagedJobID string  `json:"managedJobId,omitempty"`
+	CPUIds      []int    `json:"cpuIds"`
+	GPUUUIDs    []string `json:"gpuUuids"`
+	CPUUnbounded bool    `json:"cpuUnbounded"`
+	GPUUnbounded bool    `json:"gpuUnbounded"`
+}

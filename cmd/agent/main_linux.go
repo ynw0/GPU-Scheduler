@@ -13,8 +13,8 @@ import (
 	"syscall"
 	"time"
 
+	"gpu-scheduler/internal/agentserver"
 	"gpu-scheduler/internal/config"
-	"gpu-scheduler/internal/inventory"
 )
 
 func main() {
@@ -41,14 +41,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	discoverer := inventory.NewLinuxDiscoverer()
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /internal/v1/health", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
-	})
-	mux.HandleFunc("GET /internal/v1/topology", discoverer.HandleTopology)
-	server := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	agent, err := agentserver.New(cfg)
+	if err != nil {
+		log.Error("initialize agent", "error", err)
+		os.Exit(1)
+	}
+	defer agent.Close()
+	server := &http.Server{Handler: agent.Handler(), ReadHeaderTimeout: 5 * time.Second}
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
@@ -61,4 +60,3 @@ func main() {
 	<-stop
 	_ = server.Close()
 }
-

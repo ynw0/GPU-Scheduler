@@ -128,6 +128,43 @@ func (d *Docker) ContainersForProject(ctx context.Context, project string) (map[
 	return result, nil
 }
 
+func (d *Docker) DiscoverContainerClaims(ctx context.Context) ([]domain.ContainerClaim, error) {
+	response, err := d.client.ContainerList(ctx, client.ContainerListOptions{All: true})
+	if err != nil { return nil, err }
+	claims := make([]domain.ContainerClaim, 0, len(response.Items))
+	for _, item := range response.Items {
+		inspect, err := d.client.ContainerInspect(ctx, item.ID, client.ContainerInspectOptions{})
+		if err != nil { return nil, err }
+		info := inspect.Container
+		claim := domain.ContainerClaim{
+			ContainerID: item.ID, Name: strings.TrimPrefix(firstName(item.Names), "/"), Image: item.Image,
+			State: item.State, ManagedJobID: item.Labels[LabelJobID],
+		}
+		if info.HostConfig.CpusetCpus == "" {
+			claim.CPUUnbounded = true
+		} else {
+			claim.CPUIds, err = inventory.ParseCPUList(info.HostConfig.CpusetCpus)
+			if err != nil { return nil, err }
+		}
+		for _, request := range info.HostConfig.DeviceRequests {
+			gpuCapability := false
+			for _, capabilities := range request.Capabilities {
+				for _, capability := range capabilities { if capability == "gpu" { gpuCapability = true } }
+			}
+			if !gpuCapability { continue }
+			claim.GPUUUIDs = append(claim.GPUUUIDs, request.DeviceIDs...)
+			if request.Count < 0 && len(request.DeviceIDs) == 0 { claim.GPUUnbounded = true }
+		}
+		claims = append(claims, claim)
+	}
+	return claims, nil
+}
+
+func firstName(names []string) string {
+	if len(names) == 0 { return "" }
+	return names[0]
+}
+
 func (d *Docker) UpdateNUMA(ctx context.Context, containerID string, numaNodes []int) error {
 	resources := &container.Resources{CpusetMems: inventory.FormatCPUList(numaNodes)}
 	_, err := d.client.ContainerUpdate(ctx, containerID, client.ContainerUpdateOptions{Resources: resources})
@@ -160,4 +197,3 @@ func (d *Docker) verifyResources(ctx context.Context, containerID string, plan S
 	}
 	return nil
 }
-

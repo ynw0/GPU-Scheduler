@@ -13,6 +13,7 @@ type Config struct {
 	Agent      Agent      `toml:"agent"`
 	Security   Security   `toml:"security"`
 	Retention  Retention  `toml:"retention"`
+	Notifications Notifications `toml:"notifications"`
 }
 
 type Controller struct {
@@ -43,6 +44,26 @@ type Retention struct {
 	RawMetricDays    int `toml:"raw_metric_days"`
 	RollupMetricDays int `toml:"rollup_metric_days"`
 	BackupCount      int `toml:"backup_count"`
+}
+
+type Notifications struct {
+	SMTP SMTP `toml:"smtp"`
+	Webhook Webhook `toml:"webhook"`
+}
+
+type SMTP struct {
+	Enabled bool `toml:"enabled"`
+	Address string `toml:"address"`
+	ServerName string `toml:"server_name"`
+	Username string `toml:"username"`
+	Password string `toml:"password"`
+	From string `toml:"from"`
+}
+
+type Webhook struct {
+	Enabled bool `toml:"enabled"`
+	URL string `toml:"url"`
+	Secret string `toml:"secret"`
 }
 
 func Load(path string) (Config, error) {

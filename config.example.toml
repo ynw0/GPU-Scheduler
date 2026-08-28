@@ -23,3 +23,16 @@ password_min_length = 12
 raw_metric_days = 7
 rollup_metric_days = 90
 backup_count = 14
+
+[notifications.smtp]
+enabled = false
+address = "smtp.internal:465"
+server_name = "smtp.internal"
+username = ""
+password = ""
+from = "gpu-scheduler@internal"
+
+[notifications.webhook]
+enabled = false
+url = ""
+secret = ""

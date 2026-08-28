@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS teams (
 CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     username TEXT NOT NULL UNIQUE,
+    email TEXT UNIQUE,
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('Viewer','User','TeamOperator','Admin','Auditor')),
     team_id TEXT REFERENCES teams(id),
@@ -183,4 +184,13 @@ CREATE TABLE IF NOT EXISTS notification_deliveries (
     state TEXT NOT NULL,
     next_attempt_at TEXT,
     last_error TEXT
+);
+
+CREATE TABLE IF NOT EXISTS training_heartbeats (
+    job_id TEXT PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
+    phase TEXT NOT NULL CHECK (phase IN ('TRAINING','CHECKPOINTING','EVALUATING')),
+    epoch INTEGER,
+    step INTEGER,
+    progress REAL,
+    reported_at TEXT NOT NULL
 );
