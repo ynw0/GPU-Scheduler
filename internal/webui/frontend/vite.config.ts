@@ -1,10 +1,14 @@
+import { fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+
+const frontendRoot = dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
   plugins: [react()],
   build: {
-    outDir: new URL('../dist', import.meta.url).pathname,
+    outDir: resolve(frontendRoot, '../dist'),
     emptyOutDir: true,
   },
   server: {
