@@ -8,11 +8,14 @@ import (
 	"strings"
 )
 
-const APIVersion = "1.43"
+const (
+	APIVersion = "1.43"
+	SocketPath = "/var/run/docker.sock"
+)
 
 func URL(socketPath string) (string, error) {
-	if !strings.HasPrefix(socketPath, "/") {
-		return "", fmt.Errorf("Docker socket must be an absolute Unix path")
+	if socketPath != SocketPath {
+		return "", fmt.Errorf("Docker socket must be %s, got %s", SocketPath, socketPath)
 	}
 	return "unix://" + socketPath, nil
 }
