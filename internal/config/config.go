@@ -9,10 +9,10 @@ import (
 )
 
 type Config struct {
-	Controller Controller `toml:"controller"`
-	Agent      Agent      `toml:"agent"`
-	Security   Security   `toml:"security"`
-	Retention  Retention  `toml:"retention"`
+	Controller    Controller    `toml:"controller"`
+	Agent         Agent         `toml:"agent"`
+	Security      Security      `toml:"security"`
+	Retention     Retention     `toml:"retention"`
 	Notifications Notifications `toml:"notifications"`
 }
 
@@ -26,19 +26,19 @@ type Controller struct {
 }
 
 type Agent struct {
-	SocketPath               string `toml:"socket_path"`
-	DockerSocket             string `toml:"docker_socket"`
-	StateDirectory           string `toml:"state_directory"`
-	SampleIntervalSeconds    int    `toml:"sample_interval_seconds"`
-	ReconcileIntervalSeconds int    `toml:"reconcile_interval_seconds"`
+	SocketPath               string   `toml:"socket_path"`
+	DockerSocket             string   `toml:"docker_socket"`
+	StateDirectory           string   `toml:"state_directory"`
+	SampleIntervalSeconds    int      `toml:"sample_interval_seconds"`
+	ReconcileIntervalSeconds int      `toml:"reconcile_interval_seconds"`
 	AllowedMountRoots        []string `toml:"allowed_mount_roots"`
 }
 
 type Security struct {
-	MasterKeyPath       string `toml:"master_key_path"`
-	SessionIdleHours    int    `toml:"session_idle_hours"`
-	SessionAbsoluteHours int   `toml:"session_absolute_hours"`
-	PasswordMinLength   int    `toml:"password_min_length"`
+	MasterKeyPath        string `toml:"master_key_path"`
+	SessionIdleHours     int    `toml:"session_idle_hours"`
+	SessionAbsoluteHours int    `toml:"session_absolute_hours"`
+	PasswordMinLength    int    `toml:"password_min_length"`
 }
 
 type Retention struct {
@@ -48,23 +48,23 @@ type Retention struct {
 }
 
 type Notifications struct {
-	SMTP SMTP `toml:"smtp"`
+	SMTP    SMTP    `toml:"smtp"`
 	Webhook Webhook `toml:"webhook"`
 }
 
 type SMTP struct {
-	Enabled bool `toml:"enabled"`
-	Address string `toml:"address"`
+	Enabled    bool   `toml:"enabled"`
+	Address    string `toml:"address"`
 	ServerName string `toml:"server_name"`
-	Username string `toml:"username"`
-	Password string `toml:"password"`
-	From string `toml:"from"`
+	Username   string `toml:"username"`
+	Password   string `toml:"password"`
+	From       string `toml:"from"`
 }
 
 type Webhook struct {
-	Enabled bool `toml:"enabled"`
-	URL string `toml:"url"`
-	Secret string `toml:"secret"`
+	Enabled bool   `toml:"enabled"`
+	URL     string `toml:"url"`
+	Secret  string `toml:"secret"`
 }
 
 func Load(path string) (Config, error) {

@@ -24,11 +24,19 @@ type Server struct {
 
 func New(cfg config.Config) (*Server, error) {
 	docker, err := executor.NewDocker()
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	validator, err := executor.NewSecurityValidator(cfg.Agent.AllowedMountRoots)
-	if err != nil { docker.Close(); return nil, err }
+	if err != nil {
+		docker.Close()
+		return nil, err
+	}
 	collector, err := monitor.NewLinuxCollector()
-	if err != nil { docker.Close(); return nil, err }
+	if err != nil {
+		docker.Close()
+		return nil, err
+	}
 	s := &Server{
 		discoverer: host.NewLinuxDiscoverer(), docker: docker, validator: validator,
 		compose: executor.NewCompose(docker, validator, cfg.Agent.StateDirectory), monitor: collector,
@@ -69,28 +77,46 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) images(w http.ResponseWriter, r *http.Request) {
 	items, err := s.docker.ListImages(r.Context())
-	if err != nil { writeError(w, err); return }
+	if err != nil {
+		writeError(w, err)
+		return
+	}
 	writeJSON(w, 200, items)
 }
 
 func (s *Server) metrics(w http.ResponseWriter, _ *http.Request) {
 	snapshot, err := s.monitor.Sample()
-	if err != nil { writeError(w, err); return }
+	if err != nil {
+		writeError(w, err)
+		return
+	}
 	writeJSON(w, 200, snapshot)
 }
 
 func (s *Server) claims(w http.ResponseWriter, r *http.Request) {
 	claims, err := s.docker.DiscoverContainerClaims(r.Context())
-	if err != nil { writeError(w, err); return }
+	if err != nil {
+		writeError(w, err)
+		return
+	}
 	writeJSON(w, 200, claims)
 }
 
 func (s *Server) createImage(w http.ResponseWriter, r *http.Request) {
 	var request executor.ImageCreateRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil { writeJSON(w, 400, map[string]string{"error": err.Error()}); return }
-	if err := s.validator.ValidateImageMounts(request.Workload.Mounts); err != nil { writeJSON(w, 422, map[string]string{"error": err.Error()}); return }
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := s.validator.ValidateImageMounts(request.Workload.Mounts); err != nil {
+		writeJSON(w, 422, map[string]string{"error": err.Error()})
+		return
+	}
 	ref, err := s.docker.CreateImage(r.Context(), request)
-	if err != nil { writeError(w, err); return }
+	if err != nil {
+		writeError(w, err)
+		return
+	}
 	writeJSON(w, 201, ref)
 }
 
@@ -101,11 +127,20 @@ type composeRequest struct {
 
 func (s *Server) createCompose(w http.ResponseWriter, r *http.Request) {
 	var body composeRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil { writeJSON(w, 400, map[string]string{"error": err.Error()}); return }
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
 	effective, err := s.compose.Prepare(r.Context(), body.Request)
-	if err != nil { writeJSON(w, 422, map[string]string{"error": err.Error()}); return }
+	if err != nil {
+		writeJSON(w, 422, map[string]string{"error": err.Error()})
+		return
+	}
 	ref, err := s.compose.CreateAndStart(r.Context(), body.Request, effective)
-	if err != nil { writeError(w, err); return }
+	if err != nil {
+		writeError(w, err)
+		return
+	}
 	writeJSON(w, 201, map[string]any{"runtime": ref, "effective": effective})
 }
 
@@ -114,23 +149,43 @@ func (s *Server) stopWorkload(w http.ResponseWriter, r *http.Request) {
 		Runtime        executor.RuntimeRef `json:"runtime"`
 		TimeoutSeconds int                 `json:"timeoutSeconds"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil { writeJSON(w, 400, map[string]string{"error": err.Error()}); return }
-	if err := s.docker.Stop(r.Context(), body.Runtime, body.TimeoutSeconds); err != nil { writeError(w, err); return }
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := s.docker.Stop(r.Context(), body.Runtime, body.TimeoutSeconds); err != nil {
+		writeError(w, err)
+		return
+	}
 	w.WriteHeader(204)
 }
 
 func (s *Server) removeAttempt(w http.ResponseWriter, r *http.Request) {
-	var body struct{ AttemptID string `json:"attemptId"` }
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil { writeJSON(w, 400, map[string]string{"error": err.Error()}); return }
-	if err := s.docker.RemoveAttempt(r.Context(), body.AttemptID); err != nil { writeError(w, err); return }
+	var body struct {
+		AttemptID string `json:"attemptId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := s.docker.RemoveAttempt(r.Context(), body.AttemptID); err != nil {
+		writeError(w, err)
+		return
+	}
 	w.WriteHeader(204)
 }
 
 func (s *Server) logs(w http.ResponseWriter, r *http.Request) {
 	containerID := r.URL.Query().Get("containerId")
-	if containerID == "" { writeJSON(w, 400, map[string]string{"error": "containerId required"}); return }
+	if containerID == "" {
+		writeJSON(w, 400, map[string]string{"error": "containerId required"})
+		return
+	}
 	reader, err := s.docker.Logs(r.Context(), containerID, r.URL.Query().Get("follow") == "1")
-	if err != nil { writeError(w, err); return }
+	if err != nil {
+		writeError(w, err)
+		return
+	}
 	defer reader.Close()
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.WriteHeader(200)
@@ -139,7 +194,10 @@ func (s *Server) logs(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) hostGPUProcesses(w http.ResponseWriter, _ *http.Request) {
 	uuids, err := s.monitor.HostOccupiedGPUs()
-	if err != nil { writeError(w, err); return }
+	if err != nil {
+		writeError(w, err)
+		return
+	}
 	writeJSON(w, 200, uuids)
 }
 
@@ -152,4 +210,3 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 func writeError(w http.ResponseWriter, err error) {
 	writeJSON(w, 503, map[string]any{"type": "about:blank", "title": "Agent operation failed", "status": 503, "detail": err.Error()})
 }
-

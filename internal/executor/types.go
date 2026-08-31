@@ -45,4 +45,3 @@ type ComposeCreateRequest struct {
 	Source      ComposeSource
 	Plans       map[string]ServicePlan
 }
-

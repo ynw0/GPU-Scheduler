@@ -63,4 +63,3 @@ func FormatCPUList(ids []int) string {
 	flush()
 	return strings.Join(parts, ",")
 }
-

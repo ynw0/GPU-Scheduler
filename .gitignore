@@ -1,13 +1,19 @@
 # Build outputs
-/bin/
-/dist/
-/web/dist/
+bin/
+dist/
+web/dist/
+!internal/webui/dist/
+!internal/webui/dist/**
 coverage/
 .tools/
+.pnpm-store/
+*.tsbuildinfo
+internal/webui/frontend/vite.config.js
+internal/webui/frontend/vite.config.d.ts
+*.exe
 
 # Dependencies
 **/node_modules/
-**/.pnpm-store/
 
 # Runtime state and secrets
 data/

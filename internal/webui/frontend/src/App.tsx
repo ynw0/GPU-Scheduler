@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { api } from './api'
 import { AdminPage } from './AdminPage'
+import { JobDetail } from './JobDetail'
 import { NewJobDialog } from './JobDialog'
 import type { GPU, Job, LogicalCPU, NUMANode, Topology } from './types'
 
@@ -190,29 +191,11 @@ export function App() {
         </aside>
       )}
       {selectedJob.data && (
-        <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedJobId(undefined) }}>
-          <section className="job-dialog" style={{ width: 720, maxHeight: '80vh' }}>
-            <header className="dialog-header">
-              <div><p className="eyebrow">JOB DETAIL</p><h2>{selectedJob.data.name}</h2></div>
-              <button className="icon-button" onClick={() => setSelectedJobId(undefined)}>×</button>
-            </header>
-            <div className="dialog-body" style={{ gridTemplateColumns: '1fr', minHeight: 280 }}>
-              <div className="form-column">
-                <p>状态 {statusLabel(selectedJob.data.state)} · 优先级 {selectedJob.data.priority}</p>
-                {selectedJob.data.heartbeat && <p>训练阶段 {selectedJob.data.heartbeat.phase}</p>}
-                {(selectedJob.data.allocations ?? []).map((item) => (
-                  <div className="plan-line" key={item.id}><span>{item.resourceType}</span><strong>{item.resourceId}</strong></div>
-                ))}
-                <div className="dialog-actions">
-                  {selectedJob.data.state === 'QUEUED' && <button className="secondary-action" onClick={() => action.mutate({ id: selectedJob.data!.id, name: 'start' })}>立即调度</button>}
-                  {selectedJob.data.state === 'RUNNING' && <button className="secondary-action" onClick={() => action.mutate({ id: selectedJob.data!.id, name: 'stop' })}>停止</button>}
-                  {['QUEUED', 'RESERVED', 'RUNNING', 'CREATING', 'STARTING'].includes(selectedJob.data.state) && <button className="secondary-action" onClick={() => action.mutate({ id: selectedJob.data!.id, name: 'cancel' })}>取消</button>}
-                  {selectedJob.data.state === 'FAILED' && <button className="primary-action" onClick={() => action.mutate({ id: selectedJob.data!.id, name: 'retry' })}>重试</button>}
-                </div>
-              </div>
-            </div>
-          </section>
-        </div>
+        <JobDetail
+          job={selectedJob.data}
+          onClose={() => setSelectedJobId(undefined)}
+          onAction={(name) => action.mutate({ id: selectedJob.data!.id, name })}
+        />
       )}
     </div>
   )

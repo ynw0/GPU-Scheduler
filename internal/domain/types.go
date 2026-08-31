@@ -24,19 +24,19 @@ const (
 type JobState string
 
 const (
-	JobDraft      JobState = "DRAFT"
-	JobQueued     JobState = "QUEUED"
-	JobReserved   JobState = "RESERVED"
-	JobCreating   JobState = "CREATING"
-	JobStarting   JobState = "STARTING"
-	JobRunning    JobState = "RUNNING"
-	JobStopping   JobState = "STOPPING"
-	JobSucceeded  JobState = "SUCCEEDED"
-	JobFailed     JobState = "FAILED"
-	JobCanceled   JobState = "CANCELED"
-	JobDrifted    JobState = "DRIFTED"
-	JobOrphaned   JobState = "ORPHANED"
-	JobDegraded   JobState = "DEGRADED"
+	JobDraft     JobState = "DRAFT"
+	JobQueued    JobState = "QUEUED"
+	JobReserved  JobState = "RESERVED"
+	JobCreating  JobState = "CREATING"
+	JobStarting  JobState = "STARTING"
+	JobRunning   JobState = "RUNNING"
+	JobStopping  JobState = "STOPPING"
+	JobSucceeded JobState = "SUCCEEDED"
+	JobFailed    JobState = "FAILED"
+	JobCanceled  JobState = "CANCELED"
+	JobDrifted   JobState = "DRIFTED"
+	JobOrphaned  JobState = "ORPHANED"
+	JobDegraded  JobState = "DEGRADED"
 )
 
 type AllocationState string
@@ -58,7 +58,7 @@ const (
 type CPUMode string
 
 const (
-	CPUAutoCores    CPUMode = "auto-cores"
+	CPUAutoCores     CPUMode = "auto-cores"
 	CPUManualThreads CPUMode = "manual-threads"
 )
 
@@ -79,9 +79,9 @@ type LogicalCPU struct {
 }
 
 type NUMANode struct {
-	ID          int     `json:"id"`
-	MemoryBytes uint64  `json:"memoryBytes"`
-	CPUIds      []int   `json:"cpuIds"`
+	ID          int    `json:"id"`
+	MemoryBytes uint64 `json:"memoryBytes"`
+	CPUIds      []int  `json:"cpuIds"`
 }
 
 type GPU struct {
@@ -117,11 +117,11 @@ type Availability struct {
 }
 
 type ResourceRequest struct {
-	CPUMode     CPUMode `json:"cpuMode"`
-	CPUCount    int     `json:"cpuCount"`
-	CPUIds      []int   `json:"cpuIds,omitempty"`
-	GPUMode     GPUMode `json:"gpuMode"`
-	GPUCount    int     `json:"gpuCount"`
+	CPUMode     CPUMode  `json:"cpuMode"`
+	CPUCount    int      `json:"cpuCount"`
+	CPUIds      []int    `json:"cpuIds,omitempty"`
+	GPUMode     GPUMode  `json:"gpuMode"`
+	GPUCount    int      `json:"gpuCount"`
 	GPUUUIDs    []string `json:"gpuUuids,omitempty"`
 	MemoryBytes uint64   `json:"memoryBytes"`
 	NUMAPolicy  string   `json:"numaPolicy"`
@@ -137,15 +137,15 @@ type JobSpec struct {
 }
 
 type WorkloadSpec struct {
-	Kind             WorkloadKind          `json:"kind"`
-	Image            string                `json:"image,omitempty"`
-	Command          []string              `json:"command,omitempty"`
-	Entrypoint       []string              `json:"entrypoint,omitempty"`
-	WorkingDirectory string                `json:"workingDirectory,omitempty"`
-	Environment      map[string]string     `json:"environment,omitempty"`
-	Mounts           []Mount               `json:"mounts,omitempty"`
-	ComposeSourceID  string                `json:"composeSourceId,omitempty"`
-	Services         []ComposeService      `json:"services,omitempty"`
+	Kind             WorkloadKind      `json:"kind"`
+	Image            string            `json:"image,omitempty"`
+	Command          []string          `json:"command,omitempty"`
+	Entrypoint       []string          `json:"entrypoint,omitempty"`
+	WorkingDirectory string            `json:"workingDirectory,omitempty"`
+	Environment      map[string]string `json:"environment,omitempty"`
+	Mounts           []Mount           `json:"mounts,omitempty"`
+	ComposeSourceID  string            `json:"composeSourceId,omitempty"`
+	Services         []ComposeService  `json:"services,omitempty"`
 }
 
 func (w WorkloadSpec) AsImage() ImageWorkload {
@@ -191,17 +191,17 @@ type JobPlan struct {
 }
 
 type Job struct {
-	ID              string    `json:"id"`
-	Name            string    `json:"name"`
-	State           JobState  `json:"state"`
-	Priority        Priority  `json:"priority"`
-	OwnerID         string    `json:"ownerId"`
-	TeamID          string    `json:"teamId,omitempty"`
-	Spec            JobSpec   `json:"spec"`
-	BypassCount     int       `json:"bypassCount"`
-	IdempotencyKey  string    `json:"-"`
-	CreatedAt       time.Time `json:"createdAt"`
-	UpdatedAt       time.Time `json:"updatedAt"`
+	ID             string    `json:"id"`
+	Name           string    `json:"name"`
+	State          JobState  `json:"state"`
+	Priority       Priority  `json:"priority"`
+	OwnerID        string    `json:"ownerId"`
+	TeamID         string    `json:"teamId,omitempty"`
+	Spec           JobSpec   `json:"spec"`
+	BypassCount    int       `json:"bypassCount"`
+	IdempotencyKey string    `json:"-"`
+	CreatedAt      time.Time `json:"createdAt"`
+	UpdatedAt      time.Time `json:"updatedAt"`
 }
 
 type Allocation struct {
@@ -224,13 +224,13 @@ type GPUMetric struct {
 }
 
 type HostMetricSnapshot struct {
-	SampledAt       time.Time       `json:"sampledAt"`
-	CPUPercentByID  map[int]float64 `json:"cpuPercentById"`
-	MemoryUsedBytes uint64          `json:"memoryUsedBytes"`
-	MemoryTotalBytes uint64         `json:"memoryTotalBytes"`
-	SwapUsedBytes   uint64          `json:"swapUsedBytes"`
-	SwapTotalBytes  uint64          `json:"swapTotalBytes"`
-	GPUs            []GPUMetric     `json:"gpus"`
+	SampledAt        time.Time       `json:"sampledAt"`
+	CPUPercentByID   map[int]float64 `json:"cpuPercentById"`
+	MemoryUsedBytes  uint64          `json:"memoryUsedBytes"`
+	MemoryTotalBytes uint64          `json:"memoryTotalBytes"`
+	SwapUsedBytes    uint64          `json:"swapUsedBytes"`
+	SwapTotalBytes   uint64          `json:"swapTotalBytes"`
+	GPUs             []GPUMetric     `json:"gpus"`
 }
 
 type ContainerClaim struct {
@@ -260,9 +260,9 @@ type JobAttempt struct {
 
 type JobDetail struct {
 	Job
-	Allocations []Allocation     `json:"allocations"`
-	Attempt     *JobAttempt      `json:"attempt,omitempty"`
-	Heartbeat   *TrainingStatus  `json:"heartbeat,omitempty"`
+	Allocations []Allocation    `json:"allocations"`
+	Attempt     *JobAttempt     `json:"attempt,omitempty"`
+	Heartbeat   *TrainingStatus `json:"heartbeat,omitempty"`
 }
 
 type TrainingStatus struct {

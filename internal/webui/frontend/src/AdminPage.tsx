@@ -1,20 +1,27 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
+import { cpuSelectable, resourceNuma, selectedGPUNuma } from './numa'
 import type { User } from './types'
 
 export function AdminPage({ role }: { role: User['role'] }) {
   const queryClient = useQueryClient()
-  const [tab, setTab] = useState<'users' | 'teams' | 'quotas' | 'compose' | 'audit'>('users')
+  const [tab, setTab] = useState<'users' | 'teams' | 'quotas' | 'compose' | 'pools' | 'audit'>('users')
   const users = useQuery({ queryKey: ['users'], queryFn: api.users, enabled: role === 'Admin' })
   const teams = useQuery({ queryKey: ['teams'], queryFn: api.teams, enabled: role === 'Admin' })
   const quotas = useQuery({ queryKey: ['quotas'], queryFn: api.quotas, enabled: role === 'Admin' })
   const sources = useQuery({ queryKey: ['compose-sources'], queryFn: api.composeSources })
+  const pools = useQuery({ queryKey: ['resource-pools'], queryFn: api.resourcePools, enabled: role === 'Admin' })
+  const topology = useQuery({ queryKey: ['topology'], queryFn: api.topology, enabled: role === 'Admin' && tab === 'pools' })
   const audit = useQuery({ queryKey: ['audit'], queryFn: api.auditEvents, enabled: role === 'Admin' || role === 'Auditor' })
   const [userForm, setUserForm] = useState({ username: '', password: '', role: 'User' as User['role'], teamId: '' })
   const [teamName, setTeamName] = useState('')
   const [sourceForm, setSourceForm] = useState({ name: '', rootPath: '', entryFile: 'compose.yaml' })
   const [quotaForm, setQuotaForm] = useState({ scopeType: 'user' as 'user' | 'team', scopeId: '', gpuLimit: 4, cpuThreadLimit: 32, memoryBytesLimit: 256 * 1024 ** 3 })
+  const [poolName, setPoolName] = useState('')
+  const [poolShared, setPoolShared] = useState(false)
+  const [poolGPUs, setPoolGPUs] = useState<string[]>([])
+  const [poolCPUs, setPoolCPUs] = useState<number[]>([])
 
   const createUser = useMutation({
     mutationFn: () => api.createUser(userForm),
@@ -32,6 +39,35 @@ export function AdminPage({ role }: { role: User['role'] }) {
     mutationFn: () => api.upsertQuota({ id: '', ...quotaForm }),
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['quotas'] }) },
   })
+  const createPool = useMutation({
+    mutationFn: () => api.createResourcePool({
+      name: poolName,
+      cpuIds: poolCPUs,
+      gpuUuids: poolGPUs,
+      numaNodes: resourceNuma(topology.data, poolGPUs, poolCPUs),
+      shared: poolShared,
+    }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['resource-pools'] })
+      setPoolName('')
+      setPoolGPUs([])
+      setPoolCPUs([])
+      setPoolShared(false)
+    },
+  })
+
+  const allowedNuma = selectedGPUNuma(topology.data, poolGPUs)
+  const togglePoolGPU = (uuid: string) => {
+    setPoolGPUs((current) => {
+      const next = current.includes(uuid) ? current.filter((item) => item !== uuid) : [...current, uuid]
+      const numa = selectedGPUNuma(topology.data, next)
+      setPoolCPUs((cpus) => cpus.filter((id) => {
+        const cpu = topology.data?.cpus.find((item) => item.id === id)
+        return Boolean(cpu && cpuSelectable(cpu, numa))
+      }))
+      return next
+    })
+  }
 
   if (role !== 'Admin' && role !== 'Auditor') {
     return <section className="placeholder-panel overview-enter"><p className="eyebrow">RESTRICTED</p><h2>需要管理员权限</h2></section>
@@ -42,9 +78,9 @@ export function AdminPage({ role }: { role: User['role'] }) {
       <div className="section-heading">
         <div><p className="eyebrow">CONTROL PLANE</p><h2>系统管理</h2></div>
         <div className="mode-switch">
-          {(['users', 'teams', 'quotas', 'compose', 'audit'] as const).map((item) => (
+          {(['users', 'teams', 'quotas', 'compose', 'pools', 'audit'] as const).map((item) => (
             <button key={item} className={tab === item ? 'active' : ''} onClick={() => setTab(item)}>
-              {{ users: '用户', teams: '团队', quotas: '配额', compose: 'Compose', audit: '审计' }[item]}
+              {{ users: '用户', teams: '团队', quotas: '配额', compose: 'Compose', pools: '资源池', audit: '审计' }[item]}
             </button>
           ))}
         </div>
@@ -98,6 +134,35 @@ export function AdminPage({ role }: { role: User['role'] }) {
             <button className="primary-action" type="submit" disabled={!sourceForm.name || !sourceForm.rootPath}>登记来源</button>
           </form>
           <div className="full-job-table">{(sources.data ?? []).map((item) => <div className="full-job-row" key={item.id}><span>{item.name}</span><span className="muted">{item.rootPath}</span><span>{item.enabled ? '启用' : '停用'}</span></div>)}</div>
+        </div>
+      )}
+      {tab === 'pools' && role === 'Admin' && (
+        <div className="admin-grid">
+          <form className="admin-form" onSubmit={(event) => { event.preventDefault(); createPool.mutate() }}>
+            <label>名称<input value={poolName} onChange={(event) => setPoolName(event.target.value)} /></label>
+            <label className="checkbox-row"><input type="checkbox" checked={poolShared} onChange={(event) => setPoolShared(event.target.checked)} />共享池</label>
+            <div className="resource-choice-grid">{(topology.data?.gpus ?? []).map((gpu) => (
+              <button type="button" key={gpu.uuid} className={poolGPUs.includes(gpu.uuid) ? 'resource-choice selected' : 'resource-choice'} onClick={() => togglePoolGPU(gpu.uuid)}>
+                <span>GPU {gpu.index}</span><small>NUMA {gpu.numaNode}</small>
+              </button>
+            ))}</div>
+            <div className="thread-choice-grid">{(topology.data?.cpus ?? []).map((cpu) => {
+              const allowed = cpuSelectable(cpu, allowedNuma)
+              return <button type="button" disabled={!allowed} key={cpu.id} className={poolCPUs.includes(cpu.id) ? 'thread-choice selected' : 'thread-choice'} onClick={() => setPoolCPUs((current) => current.includes(cpu.id) ? current.filter((id) => id !== cpu.id) : [...current, cpu.id])}>{cpu.id}<small>N{cpu.numaNode}</small></button>
+            })}</div>
+            <button className="primary-action" type="submit" disabled={!poolName || (!poolCPUs.length && !poolGPUs.length) || createPool.isPending}>创建资源池</button>
+            {createPool.error && <div className="plan-conflict">{String(createPool.error.message)}</div>}
+          </form>
+          <div className="full-job-table">
+            {(pools.data ?? []).map((pool) => (
+              <div className="full-job-row" key={pool.id}>
+                <span>{pool.name}</span>
+                <span>{pool.gpuUuids.length} GPU</span>
+                <span>{pool.cpuIds.length} CPU</span>
+                <span className="muted">{pool.shared ? '共享' : '独占'} · NUMA {pool.numaNodes.join(',') || '—'}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
       {tab === 'audit' && (

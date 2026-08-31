@@ -1,6 +1,6 @@
 import type {
-  AuditEvent, Availability, ComposeSource, Health, ImageInfo, Job, JobPlan, JobSpec,
-  Notification, Quota, Team, Template, Topology, User,
+  AuditEvent, Availability, ComposeSource, Health, ImageInfo, Job, JobMetricSnapshot, JobPlan, JobSpec,
+  Notification, Quota, ResourcePool, Team, Template, Topology, User,
 } from './types'
 
 export class APIError extends Error {
@@ -62,6 +62,8 @@ export const api = {
   teams: () => request<Team[]>('/teams'),
   users: () => request<User[]>('/users'),
   quotas: () => request<Quota[]>('/quotas'),
+  resourcePools: () => request<ResourcePool[]>('/resource-pools'),
+  jobMetrics: (id: string) => request<JobMetricSnapshot[]>(`/jobs/${id}/metrics`),
   auditEvents: () => request<AuditEvent[]>('/audit-events'),
   notifications: () => request<Notification[]>('/notifications'),
   planJob: (spec: JobSpec) => mutate<JobPlan>('/job-plans', 'POST', spec),
@@ -71,6 +73,7 @@ export const api = {
   createTeam: (name: string) => mutate<Team>('/teams', 'POST', { name }),
   createUser: (value: { username: string; password: string; role: User['role']; email?: string; teamId?: string }) => mutate<User>('/users', 'POST', value),
   upsertQuota: (value: Quota) => mutate<Quota>('/quotas', 'POST', value),
+  createResourcePool: (value: { name: string; cpuIds: number[]; gpuUuids: string[]; numaNodes: number[]; shared: boolean }) => mutate<ResourcePool>('/resource-pools', 'POST', value),
   createTemplate: (name: string, spec: JobSpec) => mutate<Template>('/templates', 'POST', { name, spec }),
   markNotificationRead: (id: string) => mutate<void>(`/notifications/${id}`, 'PATCH'),
 }

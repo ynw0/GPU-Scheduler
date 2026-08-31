@@ -16,11 +16,15 @@ func BuildAvailability(topology domain.Topology, allocations []domain.Allocation
 		}
 		switch allocation.ResourceType {
 		case "cpu":
-			if id, err := strconv.Atoi(allocation.ResourceID); err == nil { blockedCPUs[id] = struct{}{} }
+			if id, err := strconv.Atoi(allocation.ResourceID); err == nil {
+				blockedCPUs[id] = struct{}{}
+			}
 		case "gpu":
 			blockedGPUs[allocation.ResourceID] = struct{}{}
 		case "memory_node":
-			if id, err := strconv.Atoi(allocation.ResourceID); err == nil { usedMemory[id] += allocation.AmountBytes }
+			if id, err := strconv.Atoi(allocation.ResourceID); err == nil {
+				usedMemory[id] += allocation.AmountBytes
+			}
 		}
 	}
 	availability := domain.Availability{MemoryByNUMA: make(map[int]uint64)}

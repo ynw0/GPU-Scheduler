@@ -54,29 +54,43 @@ func (s *ReservationService) Create(ctx context.Context, input CreateInput) (Res
 	if err == nil {
 		return ReservationResult{Job: existing, Plan: aggregate, ServicePlans: servicePlans}, nil
 	}
-	if !store.IsNotFound(err) { return ReservationResult{}, err }
+	if !store.IsNotFound(err) {
+		return ReservationResult{}, err
+	}
 	now := time.Now().UTC()
 	job := domain.Job{
 		ID: uuid.NewString(), Name: input.Spec.Name, State: domain.JobQueued,
 		Priority: input.Spec.Priority, OwnerID: input.OwnerID, TeamID: input.TeamID,
 		Spec: input.Spec, IdempotencyKey: input.IdempotencyKey, CreatedAt: now, UpdatedAt: now,
 	}
-	if aggregate.Schedulable { job.State = domain.JobReserved }
+	if aggregate.Schedulable {
+		job.State = domain.JobReserved
+	}
 	var teamID any
-	if job.TeamID != "" { teamID = job.TeamID }
+	if job.TeamID != "" {
+		teamID = job.TeamID
+	}
 	err = s.store.Immediate(ctx, func(conn *sql.Conn) error {
 		specJSON, err := json.Marshal(input.Spec)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		_, err = conn.ExecContext(ctx, `INSERT INTO jobs
             (id,name,owner_id,team_id,state,priority,spec_json,idempotency_key,bypass_count,created_at,updated_at)
             VALUES(?,?,?,?,?,?,?,?,0,?,?)`,
 			job.ID, job.Name, job.OwnerID, teamID, job.State, job.Priority,
 			string(specJSON), job.IdempotencyKey, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
-		if err != nil { return err }
-		if job.State != domain.JobReserved { return nil }
+		if err != nil {
+			return err
+		}
+		if job.State != domain.JobReserved {
+			return nil
+		}
 		for serviceName, plan := range servicePlans {
 			request := resourceRequestForService(input.Spec, serviceName)
-			if err := reservePlan(ctx, conn, job.ID, serviceName, plan, request, input.Topology, now); err != nil { return err }
+			if err := reservePlan(ctx, conn, job.ID, serviceName, plan, request, input.Topology, now); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -85,22 +99,30 @@ func (s *ReservationService) Create(ctx context.Context, input CreateInput) (Res
 
 func (s *ReservationService) Promote(ctx context.Context, job domain.Job, topology domain.Topology, availability domain.Availability) (ReservationResult, error) {
 	aggregate, servicePlans := s.planWorkload(topology, availability, job.Spec)
-	if !aggregate.Schedulable { return ReservationResult{Job: job, Plan: aggregate, ServicePlans: servicePlans}, fmt.Errorf("resource plan is not schedulable") }
+	if !aggregate.Schedulable {
+		return ReservationResult{Job: job, Plan: aggregate, ServicePlans: servicePlans}, fmt.Errorf("resource plan is not schedulable")
+	}
 	if err := s.checkQuota(ctx, CreateInput{OwnerID: job.OwnerID, TeamID: job.TeamID, Spec: job.Spec}, aggregate); err != nil {
 		return ReservationResult{Job: job, Plan: aggregate}, err
 	}
 	now := time.Now().UTC()
 	err := s.store.Immediate(ctx, func(conn *sql.Conn) error {
 		var state string
-		if err := conn.QueryRowContext(ctx, "SELECT state FROM jobs WHERE id=?", job.ID).Scan(&state); err != nil { return err }
-		if state != string(domain.JobQueued) { return fmt.Errorf("job %s is %s, not QUEUED", job.ID, state) }
+		if err := conn.QueryRowContext(ctx, "SELECT state FROM jobs WHERE id=?", job.ID).Scan(&state); err != nil {
+			return err
+		}
+		if state != string(domain.JobQueued) {
+			return fmt.Errorf("job %s is %s, not QUEUED", job.ID, state)
+		}
 		if _, err := conn.ExecContext(ctx, "UPDATE jobs SET state=?,bypass_count=0,updated_at=? WHERE id=? AND state=?",
 			domain.JobReserved, now.Format(time.RFC3339Nano), job.ID, domain.JobQueued); err != nil {
 			return err
 		}
 		for serviceName, plan := range servicePlans {
 			request := resourceRequestForService(job.Spec, serviceName)
-			if err := reservePlan(ctx, conn, job.ID, serviceName, plan, request, topology, now); err != nil { return err }
+			if err := reservePlan(ctx, conn, job.ID, serviceName, plan, request, topology, now); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -111,16 +133,24 @@ func (s *ReservationService) Promote(ctx context.Context, job domain.Job, topolo
 
 func (s *ReservationService) checkQuota(ctx context.Context, input CreateInput, plan domain.JobPlan) error {
 	userLimit, _, err := s.store.QuotaFor(ctx, "user", input.OwnerID)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	teamLimit := quota.Limit{GPUCount: -1, CPUThreadCount: -1}
 	if input.TeamID != "" {
 		teamLimit, _, err = s.store.QuotaFor(ctx, "team", input.TeamID)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 	}
 	userUsage, teamUsage, err := s.store.QuotaUsage(ctx, input.OwnerID, input.TeamID)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	threads := len(plan.CPUIds)
-	if threads == 0 { threads = requestedCPUThreads(input.Spec) }
+	if threads == 0 {
+		threads = requestedCPUThreads(input.Spec)
+	}
 	request := input.Spec.Resources
 	if input.Spec.Workload.Kind == domain.WorkloadCompose {
 		request = domain.ResourceRequest{}
@@ -130,7 +160,9 @@ func (s *ReservationService) checkQuota(ctx context.Context, input CreateInput, 
 		}
 	}
 	conflicts := quota.Check(request, threads, teamLimit, userLimit, teamUsage, userUsage)
-	if len(conflicts) > 0 { return fmt.Errorf("%s", conflicts[0]) }
+	if len(conflicts) > 0 {
+		return fmt.Errorf("%s", conflicts[0])
+	}
 	return nil
 }
 
@@ -138,11 +170,17 @@ func requestedCPUThreads(spec domain.JobSpec) int {
 	if spec.Workload.Kind == domain.WorkloadCompose {
 		total := 0
 		for _, service := range spec.Workload.Services {
-			if service.Resources.CPUMode == domain.CPUManualThreads { total += len(service.Resources.CPUIds) } else { total += service.Resources.CPUCount }
+			if service.Resources.CPUMode == domain.CPUManualThreads {
+				total += len(service.Resources.CPUIds)
+			} else {
+				total += service.Resources.CPUCount
+			}
 		}
 		return total
 	}
-	if spec.Resources.CPUMode == domain.CPUManualThreads { return len(spec.Resources.CPUIds) }
+	if spec.Resources.CPUMode == domain.CPUManualThreads {
+		return len(spec.Resources.CPUIds)
+	}
 	return spec.Resources.CPUCount
 }
 
@@ -160,7 +198,9 @@ func (s *ReservationService) planWorkload(topology domain.Topology, availability
 		plans[service.Name] = plan
 		if !plan.Schedulable {
 			aggregate.Schedulable = false
-			for _, conflict := range plan.Conflicts { aggregate.Conflicts = append(aggregate.Conflicts, service.Name+": "+conflict) }
+			for _, conflict := range plan.Conflicts {
+				aggregate.Conflicts = append(aggregate.Conflicts, service.Name+": "+conflict)
+			}
 			continue
 		}
 		aggregate.CPUIds = append(aggregate.CPUIds, plan.CPUIds...)
@@ -177,20 +217,32 @@ func (s *ReservationService) planWorkload(topology domain.Topology, availability
 
 func reservePlan(ctx context.Context, conn *sql.Conn, jobID, serviceName string, plan domain.JobPlan, request domain.ResourceRequest, topology domain.Topology, now time.Time) error {
 	for _, cpuID := range plan.CPUIds {
-		if err := insertAllocation(ctx, conn, jobID, serviceName, "cpu", strconv.Itoa(cpuID), 0, now); err != nil { return err }
+		if err := insertAllocation(ctx, conn, jobID, serviceName, "cpu", strconv.Itoa(cpuID), 0, now); err != nil {
+			return err
+		}
 	}
 	for _, gpuUUID := range plan.GPUUUIDs {
-		if err := insertAllocation(ctx, conn, jobID, serviceName, "gpu", gpuUUID, 0, now); err != nil { return err }
+		if err := insertAllocation(ctx, conn, jobID, serviceName, "gpu", gpuUUID, 0, now); err != nil {
+			return err
+		}
 	}
 	memoryPerNode := uint64(0)
-	if len(plan.NUMANodes) > 0 { memoryPerNode = (request.MemoryBytes + uint64(len(plan.NUMANodes)) - 1) / uint64(len(plan.NUMANodes)) }
+	if len(plan.NUMANodes) > 0 {
+		memoryPerNode = (request.MemoryBytes + uint64(len(plan.NUMANodes)) - 1) / uint64(len(plan.NUMANodes))
+	}
 	for _, nodeID := range plan.NUMANodes {
 		capacity := nodeCapacity(topology, nodeID)
 		var used uint64
 		if err := conn.QueryRowContext(ctx, `SELECT COALESCE(SUM(amount_bytes),0) FROM allocations
-            WHERE resource_type='memory_node' AND resource_id=? AND state IN ('RESERVED','ACTIVE','RELEASING')`, strconv.Itoa(nodeID)).Scan(&used); err != nil { return err }
-		if used+memoryPerNode > capacity { return fmt.Errorf("NUMA node %d memory reservation conflict", nodeID) }
-		if err := insertAllocation(ctx, conn, jobID, serviceName, "memory_node", strconv.Itoa(nodeID), memoryPerNode, now); err != nil { return err }
+            WHERE resource_type='memory_node' AND resource_id=? AND state IN ('RESERVED','ACTIVE','RELEASING')`, strconv.Itoa(nodeID)).Scan(&used); err != nil {
+			return err
+		}
+		if used+memoryPerNode > capacity {
+			return fmt.Errorf("NUMA node %d memory reservation conflict", nodeID)
+		}
+		if err := insertAllocation(ctx, conn, jobID, serviceName, "memory_node", strconv.Itoa(nodeID), memoryPerNode, now); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -207,7 +259,9 @@ func cloneAvailability(value domain.Availability) domain.Availability {
 	result := domain.Availability{
 		CPUIds: append([]int(nil), value.CPUIds...), GPUUUIDs: append([]string(nil), value.GPUUUIDs...), MemoryByNUMA: make(map[int]uint64),
 	}
-	for node, memory := range value.MemoryByNUMA { result.MemoryByNUMA[node] = memory }
+	for node, memory := range value.MemoryByNUMA {
+		result.MemoryByNUMA[node] = memory
+	}
 	return result
 }
 
@@ -218,37 +272,64 @@ func consumeAvailability(value *domain.Availability, plan domain.JobPlan, memory
 	if len(plan.NUMANodes) > 0 {
 		perNode := (memory + uint64(len(plan.NUMANodes)) - 1) / uint64(len(plan.NUMANodes))
 		for _, node := range plan.NUMANodes {
-			if value.MemoryByNUMA[node] > perNode { value.MemoryByNUMA[node] -= perNode } else { value.MemoryByNUMA[node] = 0 }
+			if value.MemoryByNUMA[node] > perNode {
+				value.MemoryByNUMA[node] -= perNode
+			} else {
+				value.MemoryByNUMA[node] = 0
+			}
 		}
 	}
 }
 
 func filterInts(values []int, blocked map[int]struct{}) []int {
 	result := values[:0]
-	for _, value := range values { if _, exists := blocked[value]; !exists { result = append(result, value) } }
+	for _, value := range values {
+		if _, exists := blocked[value]; !exists {
+			result = append(result, value)
+		}
+	}
 	return result
 }
 
 func filterStrings(values []string, blocked map[string]struct{}) []string {
 	result := values[:0]
-	for _, value := range values { if _, exists := blocked[value]; !exists { result = append(result, value) } }
+	for _, value := range values {
+		if _, exists := blocked[value]; !exists {
+			result = append(result, value)
+		}
+	}
 	return result
 }
 
 func appendUniqueInts(values []int, additional ...int) []int {
 	seen := intSet(values)
-	for _, value := range additional { if _, exists := seen[value]; !exists { values = append(values, value); seen[value] = struct{}{} } }
+	for _, value := range additional {
+		if _, exists := seen[value]; !exists {
+			values = append(values, value)
+			seen[value] = struct{}{}
+		}
+	}
 	return values
 }
 
 func resourceRequestForService(spec domain.JobSpec, serviceName string) domain.ResourceRequest {
-	if serviceName == "main" { return spec.Resources }
-	for _, service := range spec.Workload.Services { if service.Name == serviceName { return service.Resources } }
+	if serviceName == "main" {
+		return spec.Resources
+	}
+	for _, service := range spec.Workload.Services {
+		if service.Name == serviceName {
+			return service.Resources
+		}
+	}
 	return domain.ResourceRequest{}
 }
 
 func nodeCapacity(topology domain.Topology, nodeID int) uint64 {
-	for _, node := range topology.NUMANodes { if node.ID == nodeID { return node.MemoryBytes } }
+	for _, node := range topology.NUMANodes {
+		if node.ID == nodeID {
+			return node.MemoryBytes
+		}
+	}
 	return 0
 }
 
@@ -256,10 +337,14 @@ func IntersectPool(availability domain.Availability, pool domain.ResourcePool) d
 	cpuAllow, gpuAllow := intSet(pool.CPUIds), stringSet(pool.GPUUUIDs)
 	result := domain.Availability{MemoryByNUMA: make(map[int]uint64)}
 	for _, id := range availability.CPUIds {
-		if _, ok := cpuAllow[id]; ok { result.CPUIds = append(result.CPUIds, id) }
+		if _, ok := cpuAllow[id]; ok {
+			result.CPUIds = append(result.CPUIds, id)
+		}
 	}
 	for _, uuid := range availability.GPUUUIDs {
-		if _, ok := gpuAllow[uuid]; ok { result.GPUUUIDs = append(result.GPUUUIDs, uuid) }
+		if _, ok := gpuAllow[uuid]; ok {
+			result.GPUUUIDs = append(result.GPUUUIDs, uuid)
+		}
 	}
 	if len(pool.NUMANodes) == 0 {
 		result.MemoryByNUMA = availability.MemoryByNUMA
@@ -267,7 +352,9 @@ func IntersectPool(availability domain.Availability, pool domain.ResourcePool) d
 	}
 	nodeAllow := intSet(pool.NUMANodes)
 	for node, memory := range availability.MemoryByNUMA {
-		if _, ok := nodeAllow[node]; ok { result.MemoryByNUMA[node] = memory }
+		if _, ok := nodeAllow[node]; ok {
+			result.MemoryByNUMA[node] = memory
+		}
 	}
 	return result
 }

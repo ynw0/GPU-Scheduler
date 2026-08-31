@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, CircleGauge, Cpu, Gauge, HardDrive, LayoutGrid, X } from 'lucide-react'
 import { api } from './api'
+import { cpuSelectable, selectedGPUNuma } from './numa'
 import type { JobPlan, JobSpec, ResourceRequest, Topology } from './types'
 
 function formatBytes(value = 0): string {
@@ -72,10 +73,22 @@ export function NewJobDialog({ topology, onClose }: { topology?: Topology; onClo
     },
   })
 
-  const toggleGPU = (uuid: string) => setSelectedGPUs((current) => current.includes(uuid) ? current.filter((item) => item !== uuid) : [...current, uuid])
+  const toggleGPU = (uuid: string) => {
+    setSelectedGPUs((current) => {
+      const next = current.includes(uuid) ? current.filter((item) => item !== uuid) : [...current, uuid]
+      const numa = selectedGPUNuma(topology, next)
+      setSelectedCPUs((cpus) => cpus.filter((id) => {
+        const cpu = topology?.cpus.find((item) => item.id === id)
+        return Boolean(cpu && cpuSelectable(cpu, numa))
+      }))
+      return next
+    })
+    setPlan(undefined)
+  }
   const toggleCPU = (id: number) => setSelectedCPUs((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
   const ready = name.trim() && (kind === 'image' ? image && command.trim() : composeSourceId && serviceName.trim()) && memoryGB > 0
   const planCurrent = planKey === JSON.stringify(buildSpec())
+  const allowedNuma = gpuMode === 'manual' ? selectedGPUNuma(topology, selectedGPUs) : new Set<number>()
 
   return (
     <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
@@ -124,7 +137,11 @@ export function NewJobDialog({ topology, onClose }: { topology?: Topology; onClo
               <legend>03 / CPU</legend>
               <div className="mode-switch"><button className={cpuMode === 'auto-cores' ? 'active' : ''} onClick={() => { setCpuMode('auto-cores'); setPlan(undefined) }}>完整物理核</button><button className={cpuMode === 'manual-threads' ? 'active' : ''} onClick={() => { setCpuMode('manual-threads'); setPlan(undefined) }}>高级线程选择</button></div>
               {cpuMode === 'auto-cores' ? <label>物理核数量<input type="number" min={1} value={cpuCount} onChange={(event) => setCpuCount(Number(event.target.value))} /></label> :
-                <div className="thread-choice-grid">{(topology?.cpus ?? []).map((cpu) => <button disabled={!cpu.allocatable} key={cpu.id} className={selectedCPUs.includes(cpu.id) ? 'thread-choice selected' : 'thread-choice'} onClick={() => toggleCPU(cpu.id)}>{cpu.id}<small>N{cpu.numaNode}</small></button>)}</div>}
+                <div className="thread-choice-grid">{(topology?.cpus ?? []).map((cpu) => {
+                  const allowed = cpuSelectable(cpu, allowedNuma)
+                  return <button disabled={!allowed} key={cpu.id} className={selectedCPUs.includes(cpu.id) ? 'thread-choice selected' : 'thread-choice'} onClick={() => toggleCPU(cpu.id)}>{cpu.id}<small>N{cpu.numaNode}</small></button>
+                })}</div>}
+              {cpuMode === 'manual-threads' && allowedNuma.size > 0 && <small className="field-hint">已按所选 GPU 限制为 NUMA {[...allowedNuma].sort((a, b) => a - b).join(', ')}</small>}
             </fieldset>
           </div>
           <aside className="plan-column">

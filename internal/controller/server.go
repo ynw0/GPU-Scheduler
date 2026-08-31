@@ -86,15 +86,23 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /api/v1/notifications", s.protected(http.HandlerFunc(s.listNotifications), false))
 	s.mux.Handle("PATCH /api/v1/notifications/{id}", s.protected(http.HandlerFunc(s.readNotification), true))
 	assets, err := fs.Sub(webui.Assets, "dist")
-	if err != nil { panic(err) }
+	if err != nil {
+		panic(err)
+	}
 	s.mux.Handle("/", spa(http.FileServer(http.FS(assets)), assets))
 }
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	var request struct{ Username, Password string }
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil { writeProblem(w, 400, "Invalid request", err.Error()); return }
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeProblem(w, 400, "Invalid request", err.Error())
+		return
+	}
 	result, err := s.auth.Login(r.Context(), request.Username, request.Password)
-	if err != nil { writeProblem(w, 401, "Invalid credentials", "用户名或密码错误"); return }
+	if err != nil {
+		writeProblem(w, 401, "Invalid credentials", "用户名或密码错误")
+		return
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name: sessionCookie, Value: result.SessionToken, Path: "/", Secure: true, HttpOnly: true,
 		SameSite: http.SameSiteStrictMode, Expires: result.ExpiresAt,
@@ -114,40 +122,58 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(204)
 }
 
-func (s *Server) me(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, identityFrom(r.Context())) }
+func (s *Server) me(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 200, identityFrom(r.Context()))
+}
 
 func (s *Server) getHealth(w http.ResponseWriter, r *http.Request) {
 	agentStatus, status := "online", "ok"
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
-	if err := s.agent.Health(ctx); err != nil { agentStatus, status = "offline", "degraded" }
+	if err := s.agent.Health(ctx); err != nil {
+		agentStatus, status = "offline", "degraded"
+	}
 	writeJSON(w, 200, map[string]string{"status": status, "version": "dev", "agent": agentStatus})
 }
 
 func (s *Server) getTopology(w http.ResponseWriter, r *http.Request) {
 	topology, _, err := s.currentAvailability(r.Context())
-	if err != nil { writeProblem(w, 503, "Agent unavailable", err.Error()); return }
+	if err != nil {
+		writeProblem(w, 503, "Agent unavailable", err.Error())
+		return
+	}
 	writeJSON(w, 200, topology)
 }
 
 func (s *Server) getAvailability(w http.ResponseWriter, r *http.Request) {
 	_, availability, err := s.currentAvailability(r.Context())
-	if err != nil { writeProblem(w, 503, "Availability unavailable", err.Error()); return }
+	if err != nil {
+		writeProblem(w, 503, "Availability unavailable", err.Error())
+		return
+	}
 	writeJSON(w, 200, availability)
 }
 
 func (s *Server) getImages(w http.ResponseWriter, r *http.Request) {
 	images, err := s.agent.Images(r.Context())
-	if err != nil { writeProblem(w, 503, "Images unavailable", err.Error()); return }
+	if err != nil {
+		writeProblem(w, 503, "Images unavailable", err.Error())
+		return
+	}
 	writeJSON(w, 200, images)
 }
 
 func (s *Server) getUnmanaged(w http.ResponseWriter, r *http.Request) {
 	claims, err := s.agent.Claims(r.Context())
-	if err != nil { writeProblem(w, 503, "Containers unavailable", err.Error()); return }
+	if err != nil {
+		writeProblem(w, 503, "Containers unavailable", err.Error())
+		return
+	}
 	result := claims[:0]
 	for _, claim := range claims {
-		if claim.ManagedJobID == "" { result = append(result, claim) }
+		if claim.ManagedJobID == "" {
+			result = append(result, claim)
+		}
 	}
 	writeJSON(w, 200, result)
 }
@@ -155,11 +181,18 @@ func (s *Server) getUnmanaged(w http.ResponseWriter, r *http.Request) {
 func (s *Server) protected(next http.Handler, csrf bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cookie, err := r.Cookie(sessionCookie)
-		if err != nil { writeProblem(w, 401, "Authentication required", ""); return }
+		if err != nil {
+			writeProblem(w, 401, "Authentication required", "")
+			return
+		}
 		identity, err := s.auth.Authenticate(r.Context(), cookie.Value)
-		if err != nil { writeProblem(w, 401, "Authentication required", ""); return }
+		if err != nil {
+			writeProblem(w, 401, "Authentication required", "")
+			return
+		}
 		if csrf && !s.auth.VerifyCSRF(r.Context(), cookie.Value, r.Header.Get("X-CSRF-Token")) {
-			writeProblem(w, 403, "CSRF validation failed", ""); return
+			writeProblem(w, 403, "CSRF validation failed", "")
+			return
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), identityKey{}, identity)))
 	})
@@ -167,7 +200,10 @@ func (s *Server) protected(next http.Handler, csrf bool) http.Handler {
 
 func (s *Server) requireAdmin(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if identityFrom(r.Context()).Role != "Admin" { writeProblem(w, 403, "Forbidden", ""); return }
+		if identityFrom(r.Context()).Role != "Admin" {
+			writeProblem(w, 403, "Forbidden", "")
+			return
+		}
 		next(w, r)
 	})
 }
@@ -175,7 +211,10 @@ func (s *Server) requireAdmin(next http.HandlerFunc) http.Handler {
 func (s *Server) requireAudit(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		role := identityFrom(r.Context()).Role
-		if role != "Admin" && role != "Auditor" { writeProblem(w, 403, "Forbidden", ""); return }
+		if role != "Admin" && role != "Auditor" {
+			writeProblem(w, 403, "Forbidden", "")
+			return
+		}
 		next(w, r)
 	})
 }
@@ -217,7 +256,10 @@ func spa(next http.Handler, assets fs.FS) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/")
 		if path != "" {
-			if _, err := fs.Stat(assets, path); err == nil { next.ServeHTTP(w, r); return }
+			if _, err := fs.Stat(assets, path); err == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
 		}
 		r.URL.Path = "/"
 		next.ServeHTTP(w, r)

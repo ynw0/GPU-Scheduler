@@ -111,6 +111,7 @@ export interface JobSpec {
   priority: 'P0' | 'P1' | 'P2' | 'P3'
   workload: ImageWorkload | ComposeWorkload
   resources: ResourceRequest
+  resourcePoolId?: string
   stopGraceSeconds: number
 }
 
@@ -174,6 +175,29 @@ export interface Notification {
   body: string
   readAt?: string
   createdAt: string
+}
+
+export interface ResourcePool {
+  id: string
+  name: string
+  cpuIds: number[]
+  gpuUuids: string[]
+  numaNodes: number[]
+  shared: boolean
+  createdAt: string
+}
+
+export interface JobMetricSnapshot {
+  sampledAt: string
+  cpuPercentById?: Record<string, number>
+  gpus?: Array<{
+    uuid: string
+    utilizationPercent: number
+    memoryUsedBytes: number
+    memoryTotalBytes: number
+    temperatureCelsius: number
+    powerWatts: number
+  }>
 }
 
 export interface AuditEvent {

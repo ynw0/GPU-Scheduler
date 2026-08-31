@@ -7,9 +7,9 @@ import (
 )
 
 type Limit struct {
-	GPUCount      int
+	GPUCount       int
 	CPUThreadCount int
-	MemoryBytes   uint64
+	MemoryBytes    uint64
 }
 
 type Usage struct {
@@ -39,4 +39,3 @@ func checkScope(scope string, limit Limit, usage, request Usage) []string {
 	}
 	return conflicts
 }
-

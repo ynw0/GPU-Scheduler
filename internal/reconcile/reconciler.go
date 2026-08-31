@@ -17,19 +17,37 @@ func Compare(claims []domain.ContainerClaim, allocations []domain.Allocation, al
 	expectedCPU := make(map[string]string)
 	expectedGPU := make(map[string]string)
 	for _, allocation := range allocations {
-		if allocation.State == domain.AllocationReleased { continue }
-		if allocation.ResourceType == "cpu" { expectedCPU[allocation.ResourceID] = allocation.JobID }
-		if allocation.ResourceType == "gpu" { expectedGPU[allocation.ResourceID] = allocation.JobID }
+		if allocation.State == domain.AllocationReleased {
+			continue
+		}
+		if allocation.ResourceType == "cpu" {
+			expectedCPU[allocation.ResourceID] = allocation.JobID
+		}
+		if allocation.ResourceType == "gpu" {
+			expectedGPU[allocation.ResourceID] = allocation.JobID
+		}
 	}
 	blockedCPU := make(map[string]struct{})
 	blockedGPU := make(map[string]struct{})
 	var drifts []Drift
 	for _, claim := range claims {
 		if claim.ManagedJobID == "" {
-			if claim.CPUUnbounded { for _, id := range allCPUIds { blockedCPU[id] = struct{}{} } }
-			if claim.GPUUnbounded { for _, uuid := range allGPUUUIDs { blockedGPU[uuid] = struct{}{} } }
-			for _, id := range claim.CPUIds { blockedCPU[fmt.Sprint(id)] = struct{}{} }
-			for _, uuid := range claim.GPUUUIDs { blockedGPU[uuid] = struct{}{} }
+			if claim.CPUUnbounded {
+				for _, id := range allCPUIds {
+					blockedCPU[id] = struct{}{}
+				}
+			}
+			if claim.GPUUnbounded {
+				for _, uuid := range allGPUUUIDs {
+					blockedGPU[uuid] = struct{}{}
+				}
+			}
+			for _, id := range claim.CPUIds {
+				blockedCPU[fmt.Sprint(id)] = struct{}{}
+			}
+			for _, uuid := range claim.GPUUUIDs {
+				blockedGPU[uuid] = struct{}{}
+			}
 			continue
 		}
 		for _, id := range claim.CPUIds {
@@ -48,7 +66,8 @@ func Compare(claims []domain.ContainerClaim, allocations []domain.Allocation, al
 
 func keys(values map[string]struct{}) []string {
 	result := make([]string, 0, len(values))
-	for value := range values { result = append(result, value) }
+	for value := range values {
+		result = append(result, value)
+	}
 	return result
 }
-

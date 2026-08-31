@@ -47,7 +47,9 @@ func (s *Store) FindUserByUsername(ctx context.Context, username string) (UserRe
         FROM users WHERE username=?`, username).Scan(
 		&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.Role, &teamID,
 		&user.FailedLogins, &lockedUntil, &disabledAt)
-	if err != nil { return UserRecord{}, err }
+	if err != nil {
+		return UserRecord{}, err
+	}
 	user.TeamID = teamID.String
 	user.LockedUntil = parseOptionalTime(lockedUntil)
 	user.DisabledAt = parseOptionalTime(disabledAt)
@@ -56,10 +58,14 @@ func (s *Store) FindUserByUsername(ctx context.Context, username string) (UserRe
 
 func (s *Store) RecordFailedLogin(ctx context.Context, userID string, maxAttempts int, lockDuration time.Duration) error {
 	var attempts int
-	if err := s.db.QueryRowContext(ctx, "SELECT failed_logins FROM users WHERE id=?", userID).Scan(&attempts); err != nil { return err }
+	if err := s.db.QueryRowContext(ctx, "SELECT failed_logins FROM users WHERE id=?", userID).Scan(&attempts); err != nil {
+		return err
+	}
 	attempts++
 	var locked any
-	if attempts >= maxAttempts { locked = time.Now().UTC().Add(lockDuration).Format(time.RFC3339Nano) }
+	if attempts >= maxAttempts {
+		locked = time.Now().UTC().Add(lockDuration).Format(time.RFC3339Nano)
+	}
 	_, err := s.db.ExecContext(ctx, "UPDATE users SET failed_logins=?, locked_until=? WHERE id=?", attempts, locked, userID)
 	return err
 }
@@ -85,7 +91,9 @@ func (s *Store) FindSession(ctx context.Context, idHash string) (SessionRecord, 
         FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id_hash=? AND u.disabled_at IS NULL`, idHash).Scan(
 		&session.IDHash, &session.UserID, &session.Username, &session.Email, &session.Role, &teamID,
 		&session.CSRFHash, &createdAt, &lastSeenAt, &expiresAt)
-	if err != nil { return SessionRecord{}, err }
+	if err != nil {
+		return SessionRecord{}, err
+	}
 	session.TeamID = teamID.String
 	session.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAt)
 	session.LastSeenAt, _ = time.Parse(time.RFC3339Nano, lastSeenAt)
@@ -103,10 +111,19 @@ func (s *Store) DeleteSession(ctx context.Context, idHash string) error {
 	return err
 }
 
-func nullText(value string) any { if value == "" { return nil }; return value }
+func nullText(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
+}
 func parseOptionalTime(value sql.NullString) *time.Time {
-	if !value.Valid { return nil }
+	if !value.Valid {
+		return nil
+	}
 	parsed, err := time.Parse(time.RFC3339Nano, value.String)
-	if err != nil { return nil }
+	if err != nil {
+		return nil
+	}
 	return &parsed
 }

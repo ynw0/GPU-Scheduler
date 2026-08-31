@@ -21,7 +21,9 @@ type Docker struct {
 
 func NewDocker() (*Docker, error) {
 	cli, err := client.New(client.FromEnv)
-	if err != nil { return nil, fmt.Errorf("create Docker client: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("create Docker client: %w", err)
+	}
 	return &Docker{client: cli}, nil
 }
 
@@ -34,7 +36,9 @@ func (d *Docker) Ping(ctx context.Context) error {
 
 func (d *Docker) ListImages(ctx context.Context) ([]domain.ImageInfo, error) {
 	response, err := d.client.ImageList(ctx, client.ImageListOptions{})
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	result := make([]domain.ImageInfo, 0)
 	for _, item := range response.Items {
 		for _, tagged := range item.RepoTags {
@@ -57,16 +61,18 @@ func (d *Docker) CreateImage(ctx context.Context, request ImageCreateRequest) (R
 		mounts = append(mounts, mount.Mount{Type: mount.TypeBind, Source: item.Source, Target: item.Target, ReadOnly: item.ReadOnly})
 	}
 	environment := make([]string, 0, len(request.Workload.Environment))
-	for key, value := range request.Workload.Environment { environment = append(environment, key+"="+value) }
+	for key, value := range request.Workload.Environment {
+		environment = append(environment, key+"="+value)
+	}
 	initProcess := true
 	hostConfig := &container.HostConfig{
 		Resources: container.Resources{
 			CpusetCpus: inventory.FormatCPUList(request.Plan.CPUIds),
 			CpusetMems: inventory.FormatCPUList(request.Plan.NUMANodes),
-			Memory: int64(request.Plan.MemoryBytes), MemorySwap: int64(request.Plan.MemoryBytes),
+			Memory:     int64(request.Plan.MemoryBytes), MemorySwap: int64(request.Plan.MemoryBytes),
 		},
 		Mounts: mounts,
-		Init: &initProcess,
+		Init:   &initProcess,
 	}
 	if len(request.Plan.GPUUUIDs) > 0 {
 		hostConfig.DeviceRequests = []container.DeviceRequest{{
@@ -78,12 +84,14 @@ func (d *Docker) CreateImage(ctx context.Context, request ImageCreateRequest) (R
 		Config: &container.Config{
 			Image: request.Workload.Image, Cmd: request.Workload.Command,
 			Entrypoint: request.Workload.Entrypoint, WorkingDir: request.Workload.WorkingDirectory,
-			Env: environment,
+			Env:    environment,
 			Labels: map[string]string{LabelManaged: "true", LabelJobID: request.JobID, LabelAttemptID: request.AttemptID},
 		},
 		HostConfig: hostConfig,
 	})
-	if err != nil { return RuntimeRef{}, fmt.Errorf("create container: %w", err) }
+	if err != nil {
+		return RuntimeRef{}, fmt.Errorf("create container: %w", err)
+	}
 	if err := d.verifyResources(ctx, response.ID, request.Plan); err != nil {
 		_, _ = d.client.ContainerRemove(ctx, response.ID, client.ContainerRemoveOptions{Force: true})
 		return RuntimeRef{}, err
@@ -98,7 +106,9 @@ func (d *Docker) CreateImage(ctx context.Context, request ImageCreateRequest) (R
 func (d *Docker) Stop(ctx context.Context, ref RuntimeRef, timeoutSeconds int) error {
 	for _, id := range ref.ContainerIDs {
 		timeout := timeoutSeconds
-		if _, err := d.client.ContainerStop(ctx, id, client.ContainerStopOptions{Timeout: &timeout}); err != nil { return err }
+		if _, err := d.client.ContainerStop(ctx, id, client.ContainerStopOptions{Timeout: &timeout}); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -106,9 +116,13 @@ func (d *Docker) Stop(ctx context.Context, ref RuntimeRef, timeoutSeconds int) e
 func (d *Docker) RemoveAttempt(ctx context.Context, attemptID string) error {
 	filter := make(client.Filters).Add("label", LabelAttemptID+"="+attemptID)
 	response, err := d.client.ContainerList(ctx, client.ContainerListOptions{All: true, Filters: filter})
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	for _, item := range response.Items {
-		if _, err := d.client.ContainerRemove(ctx, item.ID, client.ContainerRemoveOptions{Force: true}); err != nil { return err }
+		if _, err := d.client.ContainerRemove(ctx, item.ID, client.ContainerRemoveOptions{Force: true}); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -122,29 +136,39 @@ func (d *Docker) Logs(ctx context.Context, containerID string, follow bool) (io.
 	result, err := d.client.ContainerLogs(ctx, containerID, client.ContainerLogsOptions{
 		ShowStdout: true, ShowStderr: true, Follow: follow, Tail: "200",
 	})
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
 func (d *Docker) ContainersForProject(ctx context.Context, project string) (map[string]string, error) {
 	filter := make(client.Filters).Add("label", "com.docker.compose.project="+project)
 	response, err := d.client.ContainerList(ctx, client.ContainerListOptions{All: true, Filters: filter})
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	result := make(map[string]string)
 	for _, item := range response.Items {
 		service := item.Labels["com.docker.compose.service"]
-		if service != "" { result[service] = item.ID }
+		if service != "" {
+			result[service] = item.ID
+		}
 	}
 	return result, nil
 }
 
 func (d *Docker) DiscoverContainerClaims(ctx context.Context) ([]domain.ContainerClaim, error) {
 	response, err := d.client.ContainerList(ctx, client.ContainerListOptions{All: true})
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	claims := make([]domain.ContainerClaim, 0, len(response.Items))
 	for _, item := range response.Items {
 		inspect, err := d.client.ContainerInspect(ctx, item.ID, client.ContainerInspectOptions{})
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		info := inspect.Container
 		if info.State == nil {
 			return nil, fmt.Errorf("container %s has no state", item.ID)
@@ -160,16 +184,26 @@ func (d *Docker) DiscoverContainerClaims(ctx context.Context) ([]domain.Containe
 			claim.CPUUnbounded = true
 		} else {
 			claim.CPUIds, err = inventory.ParseCPUList(info.HostConfig.CpusetCpus)
-			if err != nil { return nil, err }
+			if err != nil {
+				return nil, err
+			}
 		}
 		for _, request := range info.HostConfig.DeviceRequests {
 			gpuCapability := false
 			for _, capabilities := range request.Capabilities {
-				for _, capability := range capabilities { if capability == "gpu" { gpuCapability = true } }
+				for _, capability := range capabilities {
+					if capability == "gpu" {
+						gpuCapability = true
+					}
+				}
 			}
-			if !gpuCapability { continue }
+			if !gpuCapability {
+				continue
+			}
 			claim.GPUUUIDs = append(claim.GPUUUIDs, request.DeviceIDs...)
-			if request.Count < 0 && len(request.DeviceIDs) == 0 { claim.GPUUnbounded = true }
+			if request.Count < 0 && len(request.DeviceIDs) == 0 {
+				claim.GPUUnbounded = true
+			}
 		}
 		claims = append(claims, claim)
 	}
@@ -177,7 +211,9 @@ func (d *Docker) DiscoverContainerClaims(ctx context.Context) ([]domain.Containe
 }
 
 func firstName(names []string) string {
-	if len(names) == 0 { return "" }
+	if len(names) == 0 {
+		return ""
+	}
 	return names[0]
 }
 
@@ -189,7 +225,9 @@ func (d *Docker) UpdateNUMA(ctx context.Context, containerID string, numaNodes [
 
 func (d *Docker) verifyResources(ctx context.Context, containerID string, plan ServicePlan) error {
 	response, err := d.client.ContainerInspect(ctx, containerID, client.ContainerInspectOptions{})
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	info := response.Container
 	if info.HostConfig == nil {
 		return fmt.Errorf("container %s has no host config", containerID)
@@ -208,10 +246,14 @@ func (d *Docker) verifyResources(ctx context.Context, containerID string, plan S
 	if len(plan.GPUUUIDs) > 0 {
 		actual := make(map[string]struct{})
 		for _, deviceRequest := range info.HostConfig.DeviceRequests {
-			for _, id := range deviceRequest.DeviceIDs { actual[id] = struct{}{} }
+			for _, id := range deviceRequest.DeviceIDs {
+				actual[id] = struct{}{}
+			}
 		}
 		for _, uuid := range plan.GPUUUIDs {
-			if _, ok := actual[uuid]; !ok { return fmt.Errorf("container missing GPU %s", uuid) }
+			if _, ok := actual[uuid]; !ok {
+				return fmt.Errorf("container missing GPU %s", uuid)
+			}
 		}
 	}
 	return nil

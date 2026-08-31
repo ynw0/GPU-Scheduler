@@ -176,8 +176,12 @@ func selectCPUs(cpus []domain.LogicalCPU, available map[int]struct{}, allowedNod
 		}
 	}
 	sort.Slice(cores, func(i, j int) bool {
-		if cores[i].node != cores[j].node { return cores[i].node < cores[j].node }
-		if cores[i].socket != cores[j].socket { return cores[i].socket < cores[j].socket }
+		if cores[i].node != cores[j].node {
+			return cores[i].node < cores[j].node
+		}
+		if cores[i].socket != cores[j].socket {
+			return cores[i].socket < cores[j].socket
+		}
 		return cores[i].id < cores[j].id
 	})
 	if len(cores) < request.CPUCount {
@@ -218,13 +222,16 @@ func nodeSetFromGPUs(gpus []domain.GPU) map[int]struct{} {
 
 func intSet(values []int) map[int]struct{} {
 	result := make(map[int]struct{}, len(values))
-	for _, value := range values { result[value] = struct{}{} }
+	for _, value := range values {
+		result[value] = struct{}{}
+	}
 	return result
 }
 
 func stringSet(values []string) map[string]struct{} {
 	result := make(map[string]struct{}, len(values))
-	for _, value := range values { result[value] = struct{}{} }
+	for _, value := range values {
+		result[value] = struct{}{}
+	}
 	return result
 }
-

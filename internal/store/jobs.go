@@ -27,12 +27,16 @@ func (s *Store) ListJobsVisible(ctx context.Context, userID, teamID string, role
 	}
 	query += " ORDER BY created_at DESC"
 	rows, err := s.db.QueryContext(ctx, query, args...)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 	var jobs []domain.Job
 	for rows.Next() {
 		job, err := scanJob(rows)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		jobs = append(jobs, job)
 	}
 	return jobs, rows.Err()
@@ -47,7 +51,9 @@ func (s *Store) GetJob(ctx context.Context, id string) (domain.Job, error) {
 func (s *Store) ListActiveAllocations(ctx context.Context) ([]domain.Allocation, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id,job_id,service_name,resource_type,resource_id,amount_bytes,state
         FROM allocations WHERE state IN ('RESERVED','ACTIVE','RELEASING')`)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 	var result []domain.Allocation
 	for rows.Next() {
@@ -62,13 +68,21 @@ func (s *Store) ListActiveAllocations(ctx context.Context) ([]domain.Allocation,
 
 func (s *Store) TransitionJob(ctx context.Context, id string, to domain.JobState) error {
 	job, err := s.GetJob(ctx, id)
-	if err != nil { return err }
-	if err := domain.ValidateTransition(job.State, to); err != nil { return err }
+	if err != nil {
+		return err
+	}
+	if err := domain.ValidateTransition(job.State, to); err != nil {
+		return err
+	}
 	result, err := s.db.ExecContext(ctx, "UPDATE jobs SET state=?,updated_at=? WHERE id=? AND state=?",
 		to, time.Now().UTC().Format(time.RFC3339Nano), id, job.State)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	changed, _ := result.RowsAffected()
-	if changed != 1 { return fmt.Errorf("job %s changed concurrently", id) }
+	if changed != 1 {
+		return fmt.Errorf("job %s changed concurrently", id)
+	}
 	return nil
 }
 
@@ -92,13 +106,17 @@ func (s *Store) GetHeartbeat(ctx context.Context, jobID string) (domain.Training
 	var reported string
 	err := s.db.QueryRowContext(ctx, `SELECT phase,epoch,step,progress,reported_at FROM training_heartbeats WHERE job_id=?`, jobID).
 		Scan(&status.Phase, &status.Epoch, &status.Step, &status.Progress, &reported)
-	if err != nil { return domain.TrainingStatus{}, err }
+	if err != nil {
+		return domain.TrainingStatus{}, err
+	}
 	status.ReportedAt, _ = time.Parse(time.RFC3339Nano, reported)
 	return status, nil
 }
 
 func (s *Store) ListJobsByState(ctx context.Context, states ...domain.JobState) ([]domain.Job, error) {
-	if len(states) == 0 { return nil, nil }
+	if len(states) == 0 {
+		return nil, nil
+	}
 	placeholders := make([]string, len(states))
 	args := make([]any, len(states))
 	for i, state := range states {
@@ -108,12 +126,16 @@ func (s *Store) ListJobsByState(ctx context.Context, states ...domain.JobState) 
 	query := `SELECT id,name,state,priority,owner_id,COALESCE(team_id,''),spec_json,bypass_count,created_at,updated_at
         FROM jobs WHERE state IN (` + strings.Join(placeholders, ",") + `) ORDER BY priority ASC, created_at ASC`
 	rows, err := s.db.QueryContext(ctx, query, args...)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 	var jobs []domain.Job
 	for rows.Next() {
 		job, err := scanJob(rows)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		jobs = append(jobs, job)
 	}
 	return jobs, rows.Err()
@@ -122,7 +144,9 @@ func (s *Store) ListJobsByState(ctx context.Context, states ...domain.JobState) 
 func (s *Store) AllocationsForJob(ctx context.Context, jobID string) ([]domain.Allocation, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id,job_id,service_name,resource_type,resource_id,amount_bytes,state
         FROM allocations WHERE job_id=? ORDER BY resource_type, resource_id`, jobID)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 	var result []domain.Allocation
 	for rows.Next() {
@@ -165,19 +189,22 @@ func (s *Store) InsertJobEvent(ctx context.Context, jobID, eventType, payload st
 	return err
 }
 
-type scanner interface { Scan(...any) error }
+type scanner interface{ Scan(...any) error }
 
 func scanJob(row scanner) (domain.Job, error) {
 	var job domain.Job
 	var specJSON, createdAt, updatedAt string
 	err := row.Scan(&job.ID, &job.Name, &job.State, &job.Priority, &job.OwnerID, &job.TeamID,
 		&specJSON, &job.BypassCount, &createdAt, &updatedAt)
-	if err != nil { return domain.Job{}, err }
-	if err := json.Unmarshal([]byte(specJSON), &job.Spec); err != nil { return domain.Job{}, err }
+	if err != nil {
+		return domain.Job{}, err
+	}
+	if err := json.Unmarshal([]byte(specJSON), &job.Spec); err != nil {
+		return domain.Job{}, err
+	}
 	job.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAt)
 	job.UpdatedAt, _ = time.Parse(time.RFC3339Nano, updatedAt)
 	return job, nil
 }
 
 func IsNotFound(err error) bool { return err == sql.ErrNoRows }
-

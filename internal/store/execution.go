@@ -25,7 +25,9 @@ func (s *Store) BeginAttempt(ctx context.Context, jobID string) (string, error) 
 
 func (s *Store) FinishAttempt(ctx context.Context, attemptID, state string, runtime executor.RuntimeRef) error {
 	encoded, err := json.Marshal(runtime)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	_, err = s.db.ExecContext(ctx, `UPDATE job_attempts SET state=?,runtime_ref=?,finished_at=? WHERE id=?`,
 		state, string(encoded), time.Now().UTC().Format(time.RFC3339Nano), attemptID)
 	return err
@@ -33,7 +35,9 @@ func (s *Store) FinishAttempt(ctx context.Context, attemptID, state string, runt
 
 func (s *Store) StartAttempt(ctx context.Context, attemptID string, runtime executor.RuntimeRef) error {
 	encoded, err := json.Marshal(runtime)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	_, err = s.db.ExecContext(ctx, `UPDATE job_attempts SET state='RUNNING',runtime_ref=? WHERE id=?`, string(encoded), attemptID)
 	return err
 }
@@ -57,10 +61,14 @@ func (s *Store) LatestAttempt(ctx context.Context, jobID string) (domain.JobAtte
 	err := s.db.QueryRowContext(ctx, `SELECT id,job_id,attempt_number,state,COALESCE(runtime_ref,''),created_at,finished_at
         FROM job_attempts WHERE job_id=? ORDER BY attempt_number DESC LIMIT 1`, jobID).
 		Scan(&attempt.ID, &attempt.JobID, &attempt.AttemptNumber, &attempt.State, &runtimeJSON, &createdAt, &finishedAt)
-	if err != nil { return domain.JobAttempt{}, err }
+	if err != nil {
+		return domain.JobAttempt{}, err
+	}
 	if runtimeJSON != "" {
 		var runtime executor.RuntimeRef
-		if err := json.Unmarshal([]byte(runtimeJSON), &runtime); err != nil { return domain.JobAttempt{}, err }
+		if err := json.Unmarshal([]byte(runtimeJSON), &runtime); err != nil {
+			return domain.JobAttempt{}, err
+		}
 		attempt.Kind, attempt.Project, attempt.ContainerIDs = runtime.Kind, runtime.Project, runtime.ContainerIDs
 	}
 	attempt.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAt)

@@ -22,10 +22,15 @@ func Next(candidates []Candidate) (domain.Job, bool) {
 		return ordered[i].Job.CreatedAt.Before(ordered[j].Job.CreatedAt)
 	})
 	for index, candidate := range ordered {
-		if index > 0 && candidate.Job.Priority != ordered[0].Job.Priority { return domain.Job{}, false }
-		if candidate.Schedulable { return candidate.Job, true }
-		if candidate.Job.BypassCount >= maxBypasses { return domain.Job{}, false }
+		if index > 0 && candidate.Job.Priority != ordered[0].Job.Priority {
+			return domain.Job{}, false
+		}
+		if candidate.Schedulable {
+			return candidate.Job, true
+		}
+		if candidate.Job.BypassCount >= maxBypasses {
+			return domain.Job{}, false
+		}
 	}
 	return domain.Job{}, false
 }
-

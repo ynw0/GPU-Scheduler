@@ -207,7 +207,15 @@ h1 { font-size: 25px; margin-bottom: 0; letter-spacing: -.025em; font-weight: 60
 .resource-choice.selected { border-color: var(--green); color: var(--green); background: rgba(114,224,168,.06); }
 .thread-choice-grid { max-height: 190px; overflow-y: auto; display: grid; grid-template-columns: repeat(12,1fr); gap: 4px; padding-right: 5px; }
 .thread-choice { height: 34px; border: 1px solid #27312c; background: #111613; color: #69756e; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 3px; font: 8px 'Cascadia Mono', monospace; }
-.thread-choice small { color: #46504b; font-size: 6px; }.thread-choice.selected { border-color: var(--green); background: #1d382b; color: var(--green); }.thread-choice:disabled { opacity: .25; cursor: not-allowed; }
+.thread-choice small { color: #46504b; font-size: 6px; }
+.thread-choice.selected { border-color: var(--green); background: #1d382b; color: var(--green); }
+.thread-choice:disabled { opacity: .25; cursor: not-allowed; }
+.field-hint { display: block; margin-top: 8px; color: #7d8982; font-size: 11px; }
+.checkbox-row { flex-direction: row !important; align-items: center; gap: 8px !important; color: #cbd3ce !important; font-size: 12px !important; }
+.job-detail-dialog { width: min(1080px, calc(100vw - 48px)); }
+.job-detail-body { min-height: 420px; }
+.job-log { height: 280px; overflow: auto; margin: 0; padding: 12px; border: 1px solid #27312c; background: #080b09; color: #9aa89f; font: 11px 'Cascadia Mono', ui-monospace, monospace; white-space: pre-wrap; }
+.job-metric-grid { display: grid; gap: 6px; margin-top: 12px; }
 .plan-column { border-left: 1px solid var(--line); background: #0a0f0d; padding: 24px 20px; display: flex; flex-direction: column; }
 .plan-column h3 { font-size: 17px; margin-bottom: 20px; }
 .plan-empty { min-height: 210px; border: 1px dashed #28332e; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 13px; color: #4e5a53; padding: 25px; font-size: 10px; line-height: 1.7; }

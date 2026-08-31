@@ -34,31 +34,41 @@ func NewClient(socketPath string) *Client {
 
 func (c *Client) Images(ctx context.Context) ([]domain.ImageInfo, error) {
 	var result []domain.ImageInfo
-	if err := c.getJSON(ctx, "/internal/v1/images", &result); err != nil { return nil, err }
+	if err := c.getJSON(ctx, "/internal/v1/images", &result); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
 func (c *Client) Claims(ctx context.Context) ([]domain.ContainerClaim, error) {
 	var result []domain.ContainerClaim
-	if err := c.getJSON(ctx, "/internal/v1/container-claims", &result); err != nil { return nil, err }
+	if err := c.getJSON(ctx, "/internal/v1/container-claims", &result); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
 func (c *Client) HostMetrics(ctx context.Context) (domain.HostMetricSnapshot, error) {
 	var result domain.HostMetricSnapshot
-	if err := c.getJSON(ctx, "/internal/v1/metrics/host", &result); err != nil { return result, err }
+	if err := c.getJSON(ctx, "/internal/v1/metrics/host", &result); err != nil {
+		return result, err
+	}
 	return result, nil
 }
 
 func (c *Client) HostGPUProcesses(ctx context.Context) ([]string, error) {
 	var result []string
-	if err := c.getJSON(ctx, "/internal/v1/gpu-host-processes", &result); err != nil { return nil, err }
+	if err := c.getJSON(ctx, "/internal/v1/gpu-host-processes", &result); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
 func (c *Client) CreateImage(ctx context.Context, request executor.ImageCreateRequest) (executor.RuntimeRef, error) {
 	var result executor.RuntimeRef
-	if err := c.postJSON(ctx, c.longClient, "/internal/v1/workloads/image", request, &result); err != nil { return result, err }
+	if err := c.postJSON(ctx, c.longClient, "/internal/v1/workloads/image", request, &result); err != nil {
+		return result, err
+	}
 	return result, nil
 }
 
@@ -85,11 +95,17 @@ func (c *Client) RemoveAttempt(ctx context.Context, attemptID string) error {
 
 func (c *Client) Logs(ctx context.Context, containerID string, follow bool) (io.ReadCloser, error) {
 	path := "/internal/v1/workloads/logs?containerId=" + containerID
-	if follow { path += "&follow=1" }
+	if follow {
+		path += "&follow=1"
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://agent"+path, nil)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	resp, err := c.longClient.Do(req)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		defer resp.Body.Close()
 		return nil, fmt.Errorf("agent returned %s", resp.Status)
@@ -100,36 +116,54 @@ func (c *Client) Logs(ctx context.Context, containerID string, follow bool) (io.
 func (c *Client) getJSON(ctx context.Context, path string, target any) error {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://agent"+path, nil)
 	resp, err := c.httpClient.Do(req)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 { return fmt.Errorf("agent returned %s", resp.Status) }
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("agent returned %s", resp.Status)
+	}
 	return json.NewDecoder(resp.Body).Decode(target)
 }
 
 func (c *Client) postJSON(ctx context.Context, client *http.Client, path string, value, target any) error {
 	body, err := json.Marshal(value)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "http://agent"+path, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 { return fmt.Errorf("agent returned %s", resp.Status) }
-	if target == nil { return nil }
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("agent returned %s", resp.Status)
+	}
+	if target == nil {
+		return nil
+	}
 	return json.NewDecoder(resp.Body).Decode(target)
 }
 
 func (c *Client) Health(ctx context.Context) error {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://agent/internal/v1/health", nil)
 	resp, err := c.httpClient.Do(req)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK { return fmt.Errorf("agent health returned %s", resp.Status) }
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("agent health returned %s", resp.Status)
+	}
 	return nil
 }
 
 func (c *Client) Topology(ctx context.Context) (domain.Topology, error) {
 	var topology domain.Topology
-	if err := c.getJSON(ctx, "/internal/v1/topology", &topology); err != nil { return domain.Topology{}, err }
+	if err := c.getJSON(ctx, "/internal/v1/topology", &topology); err != nil {
+		return domain.Topology{}, err
+	}
 	return topology, nil
 }

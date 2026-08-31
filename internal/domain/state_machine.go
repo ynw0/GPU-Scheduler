@@ -24,4 +24,3 @@ func ValidateTransition(from, to JobState) error {
 	}
 	return nil
 }
-
