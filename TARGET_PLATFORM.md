@@ -40,6 +40,7 @@ Agent 启动时必须一次性验证：
 资源计划仍由 Scheduler 计算，资源限制仍由 Docker 写入 cgroup v1。Agent 的 cgroup 代码只负责读取和验证实际状态：
 
 - `cpuacct.usage`、`cpuacct.usage_percpu`：容器 CPU 总量与逐逻辑 CPU 用量。
+- `cpu.cfs_quota_us`、`cpu.cfs_period_us`：实际 CPU quota，识别“cpuset 允许多个 CPU、quota 实际只有一个核”的情况。
 - `memory.usage_in_bytes`、`memory.limit_in_bytes`、`memory.failcnt`、`memory.oom_control`：内存与 OOM 状态。
 - `cpuset.cpus`、`cpuset.mems`：实际 CPU 与 NUMA 内存节点。
 - `blkio.throttle.io_service_bytes_recursive`：容器块设备 I/O 计数。

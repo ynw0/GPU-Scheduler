@@ -62,6 +62,8 @@ func (c *LinuxCollector) SampleContainer(containerID string, pid int) (domain.Co
 	c.containers[containerID] = containerCPUCounters{sampledAt: now, usageByID: raw.CPUUsageNSByID}
 	return domain.ContainerMetricSnapshot{
 		SampledAt: now, ContainerID: containerID, CPUPercentByID: percentages,
+		CPUUsageNS: raw.CPUUsageNS, CPUQuotaMicros: raw.CPUQuotaMicros,
+		CPUPeriodMicros: raw.CPUPeriodMicros, CPUQuotaCores: raw.CPUQuotaCores,
 		MemoryUsedBytes: raw.MemoryUsedBytes, MemoryLimitBytes: raw.MemoryLimitBytes,
 		MemoryFailCount: raw.MemoryFailCount, OOMUnder: raw.OOMUnder,
 		CPUIds: raw.CPUIds, NUMANodes: raw.NUMANodes,

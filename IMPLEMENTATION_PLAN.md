@@ -46,6 +46,7 @@
 - Docker Client 强制使用配置的 Unix Socket，不读取 `DOCKER_HOST`，目标机关闭未经认证的 TCP 2375。
 - Docker 不支持 Swap limit 时不写 `MemorySwap`/`memswap_limit` 并显示能力提示；支持时保持 Docker 默认 Swap 行为。
 - 新增 cgroup v1 路径解析与容器 CPU、内存、OOM、cpuset、blkio 指标；Job Metrics 不再用宿主 CPU 快照冒充容器 Usage。
+- cgroup v1 reader 覆盖嵌套 controller 路径、逐 CPU 用量、CFS quota、cpuset、memory、OOM、blkio 和路径越界测试。
 - 在 Ubuntu 20.04/glibc 2.31 环境生成 Agent 生产制品，CI 只验证同一目标基线。
 
 ## 公开 API

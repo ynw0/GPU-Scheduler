@@ -237,6 +237,10 @@ type ContainerMetricSnapshot struct {
 	SampledAt         time.Time       `json:"sampledAt"`
 	ContainerID       string          `json:"containerId"`
 	CPUPercentByID    map[int]float64 `json:"cpuPercentById"`
+	CPUUsageNS        uint64          `json:"cpuUsageNs"`
+	CPUQuotaMicros    int64           `json:"cpuQuotaMicros"`
+	CPUPeriodMicros   uint64          `json:"cpuPeriodMicros"`
+	CPUQuotaCores     float64         `json:"cpuQuotaCores"`
 	MemoryUsedBytes   uint64          `json:"memoryUsedBytes"`
 	MemoryLimitBytes  uint64          `json:"memoryLimitBytes"`
 	MemoryFailCount   uint64          `json:"memoryFailCount"`

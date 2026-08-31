@@ -66,20 +66,4 @@ jobs:
       - name: OpenAPI YAML syntax
         run: |
           python -m pip install --disable-pip-version-check PyYAML==6.0.2
-          python -c "
-          import pathlib, yaml
-          spec = yaml.safe_load(pathlib.Path('api/openapi.yaml').read_text(encoding='utf-8'))
-          assert spec['openapi'] == '3.1.0'
-          paths = spec['paths']
-          methods = ('get', 'post', 'put', 'patch', 'delete')
-          ops = sum(1 for item in paths.values() for name in item if name in methods)
-          assert ops == 36, ops
-          for path in (
-              '/compose-sources/{id}',
-              '/templates/{id}',
-              '/users/{id}',
-              '/quotas/{id}',
-              '/notifications/{id}',
-          ):
-              assert 'patch' in paths[path], path
-          "
+          python tools/verify_openapi.py

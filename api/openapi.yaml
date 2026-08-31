@@ -521,13 +521,17 @@ components:
           type: array
           items:
             type: object
-            required: [sampledAt, containerId, cpuPercentById, memoryUsedBytes, memoryLimitBytes, memoryFailCount, oomUnder, cpuIds, numaNodes, blockIoReadBytes, blockIoWriteBytes]
+            required: [sampledAt, containerId, cpuPercentById, cpuUsageNs, cpuQuotaMicros, cpuPeriodMicros, cpuQuotaCores, memoryUsedBytes, memoryLimitBytes, memoryFailCount, oomUnder, cpuIds, numaNodes, blockIoReadBytes, blockIoWriteBytes]
             properties:
               sampledAt: { type: string, format: date-time }
               containerId: { type: string }
               cpuPercentById:
                 type: object
                 additionalProperties: { type: number, minimum: 0 }
+              cpuUsageNs: { type: integer, minimum: 0 }
+              cpuQuotaMicros: { type: integer, minimum: -1 }
+              cpuPeriodMicros: { type: integer, minimum: 1 }
+              cpuQuotaCores: { type: number, minimum: 0 }
               memoryUsedBytes: { type: integer, minimum: 0 }
               memoryLimitBytes: { type: integer, minimum: 0 }
               memoryFailCount: { type: integer, minimum: 0 }
@@ -563,4 +567,12 @@ components:
         name: { type: string }
         rootPath: { type: string }
         entryFile: { type: string }
+        enabled: { type: boolean }
+    ComposeSourceWrite:
+      type: object
+      required: [name, rootPath, entryFile]
+      properties:
+        name: { type: string, minLength: 1 }
+        rootPath: { type: string, minLength: 1 }
+        entryFile: { type: string, minLength: 1 }
         enabled: { type: boolean }

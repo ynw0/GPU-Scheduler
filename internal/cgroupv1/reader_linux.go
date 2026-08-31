@@ -14,7 +14,11 @@ import (
 )
 
 type Snapshot struct {
+	CPUUsageNS        uint64
 	CPUUsageNSByID    map[int]uint64
+	CPUQuotaMicros    int64
+	CPUPeriodMicros   uint64
+	CPUQuotaCores     float64
 	MemoryUsedBytes   uint64
 	MemoryLimitBytes  uint64
 	MemoryFailCount   uint64
@@ -26,23 +30,32 @@ type Snapshot struct {
 }
 
 func Read(pid int) (Snapshot, error) {
-	paths, err := controllerPaths(pid)
+	return reader{procRoot: "/proc", cgroupRoot: "/sys/fs/cgroup"}.read(pid)
+}
+
+type reader struct {
+	procRoot   string
+	cgroupRoot string
+}
+
+func (r reader) read(pid int) (Snapshot, error) {
+	paths, err := r.controllerPaths(pid)
 	if err != nil {
 		return Snapshot{}, err
 	}
-	cpuRoot, err := controllerDirectory("/sys/fs/cgroup/cpu,cpuacct", paths["cpuacct"])
+	cpuRoot, err := controllerDirectory(filepath.Join(r.cgroupRoot, "cpu,cpuacct"), paths["cpuacct"])
 	if err != nil {
 		return Snapshot{}, err
 	}
-	cpusetRoot, err := controllerDirectory("/sys/fs/cgroup/cpuset", paths["cpuset"])
+	cpusetRoot, err := controllerDirectory(filepath.Join(r.cgroupRoot, "cpuset"), paths["cpuset"])
 	if err != nil {
 		return Snapshot{}, err
 	}
-	memoryRoot, err := controllerDirectory("/sys/fs/cgroup/memory", paths["memory"])
+	memoryRoot, err := controllerDirectory(filepath.Join(r.cgroupRoot, "memory"), paths["memory"])
 	if err != nil {
 		return Snapshot{}, err
 	}
-	blkioRoot, err := controllerDirectory("/sys/fs/cgroup/blkio", paths["blkio"])
+	blkioRoot, err := controllerDirectory(filepath.Join(r.cgroupRoot, "blkio"), paths["blkio"])
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -57,6 +70,22 @@ func Read(pid int) (Snapshot, error) {
 	usageByID, err := readPerCPUUsage(filepath.Join(cpuRoot, "cpuacct.usage_percpu"), cpuIDs)
 	if err != nil {
 		return Snapshot{}, err
+	}
+	cpuUsage, err := readUint(filepath.Join(cpuRoot, "cpuacct.usage"))
+	if err != nil {
+		return Snapshot{}, err
+	}
+	cpuQuota, err := readInt64(filepath.Join(cpuRoot, "cpu.cfs_quota_us"))
+	if err != nil {
+		return Snapshot{}, err
+	}
+	cpuPeriod, err := readUint(filepath.Join(cpuRoot, "cpu.cfs_period_us"))
+	if err != nil {
+		return Snapshot{}, err
+	}
+	var cpuQuotaCores float64
+	if cpuQuota >= 0 && cpuPeriod > 0 {
+		cpuQuotaCores = float64(cpuQuota) / float64(cpuPeriod)
 	}
 	memoryUsed, err := readUint(filepath.Join(memoryRoot, "memory.usage_in_bytes"))
 	if err != nil {
@@ -79,14 +108,16 @@ func Read(pid int) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	return Snapshot{
-		CPUUsageNSByID: usageByID, MemoryUsedBytes: memoryUsed, MemoryLimitBytes: memoryLimit,
+		CPUUsageNS: cpuUsage, CPUUsageNSByID: usageByID,
+		CPUQuotaMicros: cpuQuota, CPUPeriodMicros: cpuPeriod, CPUQuotaCores: cpuQuotaCores,
+		MemoryUsedBytes: memoryUsed, MemoryLimitBytes: memoryLimit,
 		MemoryFailCount: memoryFailCount, OOMUnder: underOOM, CPUIds: cpuIDs, NUMANodes: numaNodes,
 		BlockIOReadBytes: readBytes, BlockIOWriteBytes: writeBytes,
 	}, nil
 }
 
-func controllerPaths(pid int) (map[string]string, error) {
-	file, err := os.Open(fmt.Sprintf("/proc/%d/cgroup", pid))
+func (r reader) controllerPaths(pid int) (map[string]string, error) {
+	file, err := os.Open(filepath.Join(r.procRoot, strconv.Itoa(pid), "cgroup"))
 	if err != nil {
 		return nil, err
 	}
@@ -157,6 +188,14 @@ func readUint(path string) (uint64, error) {
 		return 0, err
 	}
 	return strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64)
+}
+
+func readInt64(path string) (int64, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+	return strconv.ParseInt(strings.TrimSpace(string(data)), 10, 64)
 }
 
 func readOOM(path string) (bool, error) {
