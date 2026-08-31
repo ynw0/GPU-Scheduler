@@ -6,7 +6,7 @@
 - React 19.2、TypeScript、Vite 8.2、Node.js 24 LTS
 - Ant Design、ECharts
 - SQLite WAL
-- Linux cgroup v2、Docker Compose 2.30+、NVIDIA NVML
+- 固定 Ubuntu 20.04、Docker 24.0.5/API 1.43、cgroup v1/cgroupfs、Docker Compose 2.24.5、NVIDIA NVML
 - OpenAPI 3.1 作为公开接口唯一来源
 
 ## 里程碑
@@ -37,6 +37,14 @@
 
 - 实现本地认证、RBAC、团队与用户配额、优先级队列、训练心跳、站内通知、SMTP、Webhook 和审计。
 - 实现备份、恢复、安装、升级和运行手册。
+
+### 6. 目标机 v1 收敛
+
+- Agent 启动时验证 Docker 24.0.5/API 1.43、cgroup v1/cgroupfs、所需控制器、Compose 2.24.5、NVML 和全局 Swap 关闭状态。
+- Docker Client 强制使用配置的 Unix Socket，不读取 `DOCKER_HOST`，目标机关闭未经认证的 TCP 2375。
+- 删除无效的容器级 Swap 限制声明，内存限制只表达目标机真正能执行的能力。
+- 新增 cgroup v1 路径解析与容器 CPU、内存、OOM、cpuset、blkio 指标；Job Metrics 不再用宿主 CPU 快照冒充容器 Usage。
+- 在 Ubuntu 20.04/glibc 2.31 环境生成 Agent 生产制品，CI 只验证同一目标基线。
 
 ## 公开 API
 
@@ -82,4 +90,3 @@ GET/PATCH /api/v1/notifications
 - cgroup、NVML、指标聚合、SSE、日志和告警测试。
 - RBAC、CSRF、会话、secret、邮件、Webhook、备份与恢复测试。
 - 目标 Linux 服务器完整验收。
-

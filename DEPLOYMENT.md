@@ -2,11 +2,14 @@
 
 ## 前置条件
 
-- Linux cgroup v2。
-- Docker Engine 与 Docker Compose 2.30+。
+- Ubuntu 20.04、glibc 2.31、Kernel 5.4.0-216-generic。
+- Docker Engine 24.0.5、API 1.43、cgroup v1/cgroupfs。
+- Docker Compose v2.24.5。
 - NVIDIA Driver、NVIDIA Container Toolkit、NVML。
 - Go 1.26.7、Node.js 24 LTS、pnpm 11、C 编译工具链和 SQLite CLI。
 - Caddy 与可解析的内部域名。
+
+完整且唯一的运行环境见 [目标运行平台](TARGET_PLATFORM.md)。生产机必须关闭 Swap，并关闭未加密的 Docker TCP 2375，只保留 `/var/run/docker.sock`。
 
 ## 安装
 
@@ -19,6 +22,8 @@ sudo systemctl reload caddy
 sudo systemctl enable --now gpu-scheduler-agent gpu-scheduler-controller gpu-scheduler-backup.timer
 sudo /opt/gpu-scheduler/bin/gpu-scheduler-admin -config /etc/gpu-scheduler/config.toml -username admin -email admin@example.com
 ```
+
+Agent 为 CGO/NVML 程序，必须在 Ubuntu 20.04 或等价 glibc 2.31 环境构建生产二进制。
 
 客户端必须信任 Caddy internal CA。平台不提供生产 HTTP 登录模式。
 

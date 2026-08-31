@@ -21,7 +21,7 @@ gpu-scheduler-controller (unprivileged)
 gpu-scheduler-agent (privileged, Linux only)
   ├── Docker Engine API / events
   ├── docker compose
-  ├── cgroup v2
+  ├── cgroup v1 / cgroupfs
   ├── /proc and /sys
   ├── NVML
   ├── Metrics collector
@@ -78,7 +78,13 @@ docker compose start
 - 2 秒采集和 SSE 实时推送。
 - 10 秒原始快照，保留 7 天。
 - 1 分钟聚合，保留 90 天。
-- `/proc/stat` 提供宿主逻辑 CPU；cgroup 提供容器 CPU、内存、Swap、OOM、I/O；NVML 提供 GPU 指标与进程。
+- `/proc/stat` 提供宿主逻辑 CPU；cgroup v1 提供容器 CPU、逐逻辑 CPU、内存、OOM、cpuset 和 blkio 指标；NVML 提供 GPU 指标与进程。
+- cgroup 路径由 Docker Inspect 的容器 init PID 与 `/proc/<pid>/cgroup` 解析，不根据容器 ID 猜测路径。
+- 目标机不支持容器级 Swap 限制，生产运行要求全局关闭 Swap。
+
+## 目标平台边界
+
+系统只支持 [目标运行平台](TARGET_PLATFORM.md) 中定义的 Ubuntu 20.04、Docker 24.0.5、API 1.43、cgroup v1/cgroupfs 和 Compose 2.24.5。Agent 启动时验证该契约，不提供 v2、systemd driver 或版本降级分支。
 
 ## 安全
 

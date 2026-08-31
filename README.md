@@ -11,17 +11,18 @@ GPU Scheduler 是面向单台 Linux AI 训练服务器的 Docker 资源调度平
 - [Linux 部署](DEPLOYMENT.md)
 - [运维手册](OPERATIONS.md)
 - [安全模型](SECURITY.md)
+- [目标运行平台](TARGET_PLATFORM.md)
 
 ## 技术基线
 
-- Linux 裸机、cgroup v2
-- Docker Engine、Docker Compose 2.30+
+- 固定 Ubuntu 20.04 裸机、Docker cgroup v1/cgroupfs
+- Docker Engine 24.0.5（API 1.43）、Docker Compose 2.24.5
 - NVIDIA Driver、NVIDIA Container Toolkit、NVML
 - Go 1.26.7
 - React 19.2、TypeScript、Vite 8.2、Node.js 24 LTS
 - SQLite WAL
 
-项目不提供 Windows 生产运行、cgroup v1、MIG、GPU 共享、任务抢占和多节点兼容分支。
+项目不提供 cgroup v2、Docker systemd cgroup driver、Windows 生产运行、MIG、GPU 共享、任务抢占和多节点兼容分支。
 
 ## 进程
 

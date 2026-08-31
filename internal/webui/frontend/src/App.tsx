@@ -218,7 +218,7 @@ function LoginScreen() {
           <h1>把拓扑变成<br /><em>可调度的秩序。</em></h1>
           <p>Docker 生命周期、整卡 GPU、CPU 线程与 NUMA 本地性，在同一个控制面中保持一致。</p>
         </div>
-        <div className="login-signals"><span>CGROUP V2</span><span>NVML</span><span>STRICT NUMA</span><span>RECONCILIATION</span></div>
+        <div className="login-signals"><span>CGROUP V1</span><span>NVML</span><span>STRICT NUMA</span><span>RECONCILIATION</span></div>
       </section>
       <section className="login-panel">
         <form onSubmit={(event) => { event.preventDefault(); login.mutate() }}>

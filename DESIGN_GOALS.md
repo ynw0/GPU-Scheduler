@@ -55,7 +55,6 @@ GPU Scheduler 是单机 AI 训练资源调度平台，不是通用 Docker 管理
 
 - 通用 Docker GUI、镜像构建或仓库拉取。
 - Web Terminal、文件管理器和原始 Docker 命令执行。
-- Windows 生产运行、Docker Desktop、cgroup v1 和旧系统兼容。
+- Windows 生产运行、Docker Desktop、cgroup v2、Docker systemd cgroup driver 和非目标机兼容。
 - Kubernetes、Slurm、Nomad、多节点、高可用和任务抢占。
 - MIG、GPU 超卖和未经管控的 Compose。
-
