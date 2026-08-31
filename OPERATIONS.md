@@ -13,7 +13,7 @@ grep -E 'SwapTotal' /proc/meminfo
 
 Agent 离线时 Controller 保持只读降级状态，不创建新资源预约。非受管无限制容器会阻塞相应资源分配。
 
-固定基线必须显示 Docker `24.0.5 1 cgroupfs false`、Compose `v2.24.5` 和 `SwapTotal: 0 kB`。Docker 不得监听未经认证的 TCP 2375。
+固定基线必须显示 Docker `24.0.5 1 cgroupfs false` 和 Compose `v2.24.5`。现有 2 GiB Swap 可以保留；`SwapLimit=false` 时页面应提示“不支持每任务 Swap 限制”。Docker 不得监听未经认证的 TCP 2375。
 
 ## 恢复数据库
 
@@ -31,4 +31,4 @@ Agent 离线时 Controller 保持只读降级状态，不创建新资源预约�
 - Agent 心跳中断：立即告警。
 - OOM、GPU 健康异常和资源漂移：立即告警。
 - GPU 利用率低于 10% 且 CPU 高于 85% 持续 10 分钟：数据管线瓶颈告警。
-- 检测到 Swap 被启用、磁盘使用率超过 90%、备份失败：运维告警。
+- Swap 使用量持续升高、磁盘使用率超过 90%、备份失败：运维告警。

@@ -9,7 +9,7 @@
 - Go 1.26.7、Node.js 24 LTS、pnpm 11、C 编译工具链和 SQLite CLI。
 - Caddy 与可解析的内部域名。
 
-完整且唯一的运行环境见 [目标运行平台](TARGET_PLATFORM.md)。生产机必须关闭 Swap，并关闭未加密的 Docker TCP 2375，只保留 `/var/run/docker.sock`。
+完整且唯一的运行环境见 [目标运行平台](TARGET_PLATFORM.md)。生产机可以保留现有 Swap；若 Docker 不支持 Swap limit，页面会提示不支持每任务限制。必须关闭未加密的 Docker TCP 2375，只保留 `/var/run/docker.sock`。
 
 ## 安装
 

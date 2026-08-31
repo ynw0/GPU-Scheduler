@@ -42,9 +42,9 @@
 
 状态：源码、文档和嵌入前端已完成，等待目标 Ubuntu 20.04 服务器验收。
 
-- Agent 启动时验证 Docker 24.0.5/API 1.43、cgroup v1/cgroupfs、所需控制器、Compose 2.24.5、NVML 和全局 Swap 关闭状态。
+- Agent 启动时验证 Docker 24.0.5/API 1.43、cgroup v1/cgroupfs、所需控制器、Compose 2.24.5 和 NVML，并报告宿主 Swap 与 Docker Swap limit 能力。
 - Docker Client 强制使用配置的 Unix Socket，不读取 `DOCKER_HOST`，目标机关闭未经认证的 TCP 2375。
-- 删除无效的容器级 Swap 限制声明，内存限制只表达目标机真正能执行的能力。
+- Docker 不支持 Swap limit 时不写 `MemorySwap`/`memswap_limit` 并显示能力提示；支持时保持 Docker 默认 Swap 行为。
 - 新增 cgroup v1 路径解析与容器 CPU、内存、OOM、cpuset、blkio 指标；Job Metrics 不再用宿主 CPU 快照冒充容器 Usage。
 - 在 Ubuntu 20.04/glibc 2.31 环境生成 Agent 生产制品，CI 只验证同一目标基线。
 

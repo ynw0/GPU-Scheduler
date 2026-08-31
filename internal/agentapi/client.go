@@ -157,17 +157,25 @@ func (c *Client) postJSON(ctx context.Context, client *http.Client, path string,
 	return json.NewDecoder(resp.Body).Decode(target)
 }
 
-func (c *Client) Health(ctx context.Context) error {
+func (c *Client) Health(ctx context.Context) ([]string, error) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://agent/internal/v1/health", nil)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("agent health returned %s", resp.Status)
+		return nil, fmt.Errorf("agent health returned %s", resp.Status)
 	}
-	return nil
+	var result struct {
+		Platform struct {
+			Warnings []string `json:"warnings"`
+		} `json:"platform"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	return result.Platform.Warnings, nil
 }
 
 func (c *Client) Topology(ctx context.Context) (domain.Topology, error) {

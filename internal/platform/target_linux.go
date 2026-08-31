@@ -25,12 +25,15 @@ const (
 )
 
 type Runtime struct {
-	DockerVersion  string `json:"dockerVersion"`
-	DockerAPI      string `json:"dockerApi"`
-	CgroupVersion  string `json:"cgroupVersion"`
-	CgroupDriver   string `json:"cgroupDriver"`
-	ComposeVersion string `json:"composeVersion"`
-	SwapEnabled    bool   `json:"swapEnabled"`
+	DockerVersion      string   `json:"dockerVersion"`
+	DockerAPI          string   `json:"dockerApi"`
+	CgroupVersion      string   `json:"cgroupVersion"`
+	CgroupDriver       string   `json:"cgroupDriver"`
+	ComposeVersion     string   `json:"composeVersion"`
+	SwapEnabled        bool     `json:"swapEnabled"`
+	SwapTotalBytes     uint64   `json:"swapTotalBytes"`
+	SwapLimitSupported bool     `json:"swapLimitSupported"`
+	Warnings           []string `json:"warnings"`
 }
 
 func Validate(ctx context.Context, socketPath string, info system.Info, version client.ServerVersionResult) (Runtime, error) {
@@ -45,7 +48,11 @@ func Validate(ctx context.Context, socketPath string, info system.Info, version 
 	runtime := Runtime{
 		DockerVersion: version.Version, DockerAPI: version.APIVersion,
 		CgroupVersion: info.CgroupVersion, CgroupDriver: info.CgroupDriver,
-		ComposeVersion: composeVersion, SwapEnabled: swapTotal > 0,
+		ComposeVersion: composeVersion, SwapEnabled: swapTotal > 0, SwapTotalBytes: swapTotal,
+		SwapLimitSupported: info.SwapLimit, Warnings: make([]string, 0),
+	}
+	if !info.SwapLimit {
+		runtime.Warnings = append(runtime.Warnings, "不支持每任务 Swap 限制")
 	}
 	if version.Version != DockerVersion {
 		return Runtime{}, fmt.Errorf("Docker Engine must be %s, got %s", DockerVersion, version.Version)
@@ -59,14 +66,8 @@ func Validate(ctx context.Context, socketPath string, info system.Info, version 
 	if !info.CPUSet || !info.MemoryLimit {
 		return Runtime{}, fmt.Errorf("Docker must support cpuset and memory limits")
 	}
-	if info.SwapLimit {
-		return Runtime{}, fmt.Errorf("Docker swap limit capability differs from the fixed target")
-	}
 	if composeVersion != ComposeVersion {
 		return Runtime{}, fmt.Errorf("Docker Compose must be %s, got %s", ComposeVersion, composeVersion)
-	}
-	if swapTotal != 0 {
-		return Runtime{}, fmt.Errorf("host swap must be disabled, got %d bytes", swapTotal)
 	}
 	for _, path := range []string{
 		"/sys/fs/cgroup/cpu,cpuacct",

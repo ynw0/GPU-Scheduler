@@ -331,11 +331,12 @@ components:
   schemas:
     Health:
       type: object
-      required: [status, version, agent]
+      required: [status, version, agent, warnings]
       properties:
         status: { type: string, enum: [ok, degraded] }
         version: { type: string }
         agent: { type: string, enum: [online, offline] }
+        warnings: { type: array, items: { type: string } }
     LoginRequest:
       type: object
       required: [username, password]

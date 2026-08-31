@@ -25,9 +25,15 @@ Agent 启动时必须一次性验证：
 3. `cpu,cpuacct`、`cpuset`、`memory`、`blkio` 控制器已挂载。
 4. Docker Compose 版本严格等于 v2.24.5。
 5. Docker 支持 cpuset 与 memory limit，NVML 可以初始化。
-6. 宿主机 Swap 总量为零。
+6. 读取宿主机 Swap 总量和 Docker Swap limit 能力。
 
-任一条件不满足时 Agent 拒绝启动。系统不切换到其他实现，不降级为不受控运行。
+前五项任一条件不满足时 Agent 拒绝启动。Swap 可以正常启用；能力差异只影响每任务 Swap 限制，不影响 Agent 启动。
+
+## Swap 语义
+
+- Docker `SwapLimit=false` 时，平台不写 `MemorySwap` 或 Compose `memswap_limit`，并提示“不支持每任务 Swap 限制”。容器继续共享宿主机现有 Swap。
+- Docker `SwapLimit=true` 时，平台仍不禁用 Swap，由 Docker 按其默认策略使用和限制宿主 Swap。
+- 平台始终监控宿主 Swap 总量与用量，但不把宿主共享 Swap 记为某个 Job 的专属资源。
 
 ## cgroup v1 职责
 
@@ -45,7 +51,6 @@ Agent 启动时必须一次性验证：
 - cgroup v2 和 Docker `systemd` cgroup driver。
 - Ubuntu 22.04/24.04、Docker Desktop、Windows 生产运行。
 - 其他 Docker Engine、API、Compose 或 NVIDIA Container Toolkit 版本。
-- 容器级 Swap 限制；目标机通过全局关闭 Swap 保证该边界。
 - 每 Job PSI、MIG、GPU 共享、抢占和多节点。
 
 Agent 使用 CGO 链接 NVML。生产 Agent 必须在 Ubuntu 20.04 或等价 glibc 2.31 构建环境生成，不能使用更高版本 glibc 的通用 Linux 构建产物。

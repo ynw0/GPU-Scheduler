@@ -128,12 +128,16 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) getHealth(w http.ResponseWriter, r *http.Request) {
 	agentStatus, status := "online", "ok"
+	warnings := make([]string, 0)
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
-	if err := s.agent.Health(ctx); err != nil {
+	agentWarnings, err := s.agent.Health(ctx)
+	if err != nil {
 		agentStatus, status = "offline", "degraded"
+	} else {
+		warnings = agentWarnings
 	}
-	writeJSON(w, 200, map[string]string{"status": status, "version": "dev", "agent": agentStatus})
+	writeJSON(w, 200, map[string]any{"status": status, "version": "dev", "agent": agentStatus, "warnings": warnings})
 }
 
 func (s *Server) getTopology(w http.ResponseWriter, r *http.Request) {

@@ -80,7 +80,7 @@ docker compose start
 - 1 分钟聚合，保留 90 天。
 - `/proc/stat` 提供宿主逻辑 CPU；cgroup v1 提供容器 CPU、逐逻辑 CPU、内存、OOM、cpuset 和 blkio 指标；NVML 提供 GPU 指标与进程。
 - cgroup 路径由 Docker Inspect 的容器 init PID 与 `/proc/<pid>/cgroup` 解析，不根据容器 ID 猜测路径。
-- 目标机不支持容器级 Swap 限制，生产运行要求全局关闭 Swap。
+- Docker 不支持 Swap limit 时不写 `MemorySwap` 或 `memswap_limit`，健康接口和页面提示“不支持每任务 Swap 限制”；宿主 Swap 保持正常工作。
 
 ## 目标平台边界
 

@@ -2,6 +2,7 @@ export interface Health {
   status: 'ok' | 'degraded'
   version: string
   agent: 'online' | 'offline'
+  warnings: string[]
 }
 
 export interface User {

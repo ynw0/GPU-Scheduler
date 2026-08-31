@@ -150,6 +150,12 @@ export function App() {
             <div><strong>Agent 通道不可用</strong><span>资源数据已停止更新，平台不会在状态未知时分配资源。</span></div>
           </div>
         )}
+        {!isOffline && (health.data?.warnings ?? []).map((warning) => (
+          <div className="offline-banner" key={warning}>
+            <Zap size={18} />
+            <div><strong>运行能力提示</strong><span>{warning}</span></div>
+          </div>
+        ))}
         {!isOffline && topology.isError && (
           <div className="offline-banner">
             <Zap size={18} />
