@@ -83,7 +83,7 @@ func Validate(ctx context.Context, socketPath string, info system.Info, version 
 }
 
 func readComposeVersion(ctx context.Context, socketPath string) (string, error) {
-	command, err := dockerhost.Command(ctx, socketPath, "compose", "version", "--short")
+	command, err := dockerhost.ComposeCommand(ctx, socketPath, "version", "--short")
 	if err != nil {
 		return "", err
 	}

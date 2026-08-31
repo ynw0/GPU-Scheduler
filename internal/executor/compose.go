@@ -41,7 +41,7 @@ func (c *Compose) Prepare(ctx context.Context, request ComposeCreateRequest) (Ef
 	if err != nil {
 		return EffectiveCompose{}, err
 	}
-	command, err := dockerhost.Command(ctx, c.socketPath, "compose", "--project-directory", root, "-f", entry, "config", "--format", "json")
+	command, err := dockerhost.ComposeCommand(ctx, c.socketPath, "--project-directory", root, "-f", entry, "config", "--format", "json")
 	if err != nil {
 		return EffectiveCompose{}, err
 	}
@@ -93,7 +93,7 @@ func (c *Compose) Prepare(ctx context.Context, request ComposeCreateRequest) (Ef
 }
 
 func (c *Compose) CreateAndStart(ctx context.Context, request ComposeCreateRequest, effective EffectiveCompose) (RuntimeRef, error) {
-	create, err := dockerhost.Command(ctx, c.socketPath, "compose", "-p", request.ProjectName, "-f", effective.Path, "create")
+	create, err := dockerhost.ComposeCommand(ctx, c.socketPath, "-p", request.ProjectName, "-f", effective.Path, "create")
 	if err != nil {
 		return RuntimeRef{}, err
 	}
@@ -121,7 +121,7 @@ func (c *Compose) CreateAndStart(ctx context.Context, request ComposeCreateReque
 			return RuntimeRef{}, err
 		}
 	}
-	start, err := dockerhost.Command(ctx, c.socketPath, "compose", "-p", request.ProjectName, "-f", effective.Path, "start")
+	start, err := dockerhost.ComposeCommand(ctx, c.socketPath, "-p", request.ProjectName, "-f", effective.Path, "start")
 	if err != nil {
 		_ = c.cleanupProject(ctx, request.ProjectName)
 		return RuntimeRef{}, err
