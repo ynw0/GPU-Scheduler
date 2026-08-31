@@ -41,7 +41,7 @@ func (d *LinuxDiscoverer) Discover() (domain.Topology, error) {
 	if err != nil {
 		return domain.Topology{}, err
 	}
-	gpus, err := d.discoverGPUs()
+	gpus, err := d.discoverGPUs(nodes)
 	if err != nil {
 		return domain.Topology{}, err
 	}
@@ -141,11 +141,7 @@ func (d *LinuxDiscoverer) discoverCPUs(cpuToNode map[int]int) ([]domain.LogicalC
 	return cpus, nil
 }
 
-func (d *LinuxDiscoverer) discoverGPUs() ([]domain.GPU, error) {
-	if ret := nvml.Init(); ret != nvml.SUCCESS {
-		return nil, fmt.Errorf("initialize NVML: %s", nvml.ErrorString(ret))
-	}
-	defer nvml.Shutdown()
+func (d *LinuxDiscoverer) discoverGPUs(nodes []domain.NUMANode) ([]domain.GPU, error) {
 	count, ret := nvml.DeviceGetCount()
 	if ret != nvml.SUCCESS {
 		return nil, fmt.Errorf("get NVML device count: %s", nvml.ErrorString(ret))
@@ -173,9 +169,9 @@ func (d *LinuxDiscoverer) discoverGPUs() ([]domain.GPU, error) {
 			return nil, fmt.Errorf("get GPU %d memory: %s", index, nvml.ErrorString(ret))
 		}
 		pciBusID := fmt.Sprintf("%04x:%02x:%02x.0", pci.Domain, pci.Bus, pci.Device)
-		numaNode, err := readInt(filepath.Join(d.sysRoot, "bus/pci/devices", pciBusID, "numa_node"))
-		if err != nil || numaNode < 0 {
-			return nil, fmt.Errorf("resolve NUMA node for GPU %s at %s", uuid, pciBusID)
+		numaNode, err := d.gpuNUMANode(pciBusID, nodes)
+		if err != nil {
+			return nil, err
 		}
 		gpus = append(gpus, domain.GPU{
 			UUID: uuid, Index: index, Name: name, PCIBusID: pciBusID, NUMANode: numaNode,
@@ -183,6 +179,17 @@ func (d *LinuxDiscoverer) discoverGPUs() ([]domain.GPU, error) {
 		})
 	}
 	return gpus, nil
+}
+
+func (d *LinuxDiscoverer) gpuNUMANode(pciBusID string, nodes []domain.NUMANode) (int, error) {
+	value, err := readInt(filepath.Join(d.sysRoot, "bus/pci/devices", pciBusID, "numa_node"))
+	if err == nil && value >= 0 {
+		return value, nil
+	}
+	if len(nodes) == 1 {
+		return nodes[0].ID, nil
+	}
+	return 0, fmt.Errorf("resolve NUMA node for GPU PCI %s", pciBusID)
 }
 
 func readText(path string) (string, error) {

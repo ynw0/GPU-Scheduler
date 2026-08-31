@@ -58,7 +58,7 @@ export function App() {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me, retry: false, refetchInterval: false })
   const authenticated = Boolean(me.data)
   const health = useQuery({ queryKey: ['health'], queryFn: api.health })
-  const topology = useQuery({ queryKey: ['topology'], queryFn: api.topology, enabled: authenticated })
+  const topology = useQuery({ queryKey: ['topology'], queryFn: api.topology, enabled: authenticated, staleTime: 10_000, refetchInterval: 15_000, retry: false })
   const availability = useQuery({ queryKey: ['availability'], queryFn: api.availability, enabled: authenticated })
   const jobs = useQuery({ queryKey: ['jobs'], queryFn: api.jobs, enabled: authenticated })
   const notifications = useQuery({ queryKey: ['notifications'], queryFn: api.notifications, enabled: authenticated })
@@ -74,7 +74,7 @@ export function App() {
       void queryClient.invalidateQueries({ queryKey: ['notifications'] })
     }
     source.addEventListener('job', refresh)
-    source.addEventListener('metrics', () => { void queryClient.invalidateQueries({ queryKey: ['topology'] }) })
+    source.addEventListener('metrics', () => { void queryClient.invalidateQueries({ queryKey: ['availability'] }) })
     return () => source.close()
   }, [authenticated, queryClient])
 
@@ -91,7 +91,7 @@ export function App() {
 
   const running = (jobs.data ?? []).filter((job) => job.state === 'RUNNING')
   const queued = (jobs.data ?? []).filter((job) => job.state === 'QUEUED')
-  const isOffline = health.data?.agent === 'offline' || topology.isError
+  const isOffline = health.data?.agent === 'offline'
 
   return (
     <div className="shell">
@@ -147,6 +147,12 @@ export function App() {
           <div className="offline-banner">
             <Zap size={18} />
             <div><strong>Agent 通道不可用</strong><span>资源数据已停止更新，平台不会在状态未知时分配资源。</span></div>
+          </div>
+        )}
+        {!isOffline && topology.isError && (
+          <div className="offline-banner">
+            <Zap size={18} />
+            <div><strong>拓扑发现失败</strong><span>{topology.error instanceof Error ? topology.error.message : '无法读取 CPU / GPU / NUMA 拓扑。'}</span></div>
           </div>
         )}
 
