@@ -520,8 +520,9 @@ components:
           type: array
           items:
             type: object
-            required: [containerId, cpuPercentById, memoryUsedBytes, memoryLimitBytes, memoryFailCount, oomUnder, cpuIds, numaNodes, blockIoReadBytes, blockIoWriteBytes]
+            required: [sampledAt, containerId, cpuPercentById, memoryUsedBytes, memoryLimitBytes, memoryFailCount, oomUnder, cpuIds, numaNodes, blockIoReadBytes, blockIoWriteBytes]
             properties:
+              sampledAt: { type: string, format: date-time }
               containerId: { type: string }
               cpuPercentById:
                 type: object
