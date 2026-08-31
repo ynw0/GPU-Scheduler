@@ -233,6 +233,33 @@ type HostMetricSnapshot struct {
 	GPUs             []GPUMetric     `json:"gpus"`
 }
 
+type ContainerMetricSnapshot struct {
+	SampledAt         time.Time       `json:"sampledAt"`
+	ContainerID       string          `json:"containerId"`
+	CPUPercentByID    map[int]float64 `json:"cpuPercentById"`
+	MemoryUsedBytes   uint64          `json:"memoryUsedBytes"`
+	MemoryLimitBytes  uint64          `json:"memoryLimitBytes"`
+	MemoryFailCount   uint64          `json:"memoryFailCount"`
+	OOMUnder          bool            `json:"oomUnder"`
+	CPUIds            []int           `json:"cpuIds"`
+	NUMANodes         []int           `json:"numaNodes"`
+	BlockIOReadBytes  uint64          `json:"blockIoReadBytes"`
+	BlockIOWriteBytes uint64          `json:"blockIoWriteBytes"`
+}
+
+type JobMetricSnapshot struct {
+	SampledAt         time.Time                 `json:"sampledAt"`
+	CPUPercentByID    map[int]float64           `json:"cpuPercentById"`
+	MemoryUsedBytes   uint64                    `json:"memoryUsedBytes"`
+	MemoryLimitBytes  uint64                    `json:"memoryLimitBytes"`
+	MemoryFailCount   uint64                    `json:"memoryFailCount"`
+	OOMUnder          bool                      `json:"oomUnder"`
+	BlockIOReadBytes  uint64                    `json:"blockIoReadBytes"`
+	BlockIOWriteBytes uint64                    `json:"blockIoWriteBytes"`
+	GPUs              []GPUMetric               `json:"gpus"`
+	Containers        []ContainerMetricSnapshot `json:"containers"`
+}
+
 type ContainerClaim struct {
 	ContainerID  string   `json:"containerId"`
 	Name         string   `json:"name"`

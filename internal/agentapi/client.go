@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"time"
 
 	"gpu-scheduler/internal/domain"
@@ -51,6 +52,15 @@ func (c *Client) Claims(ctx context.Context) ([]domain.ContainerClaim, error) {
 func (c *Client) HostMetrics(ctx context.Context) (domain.HostMetricSnapshot, error) {
 	var result domain.HostMetricSnapshot
 	if err := c.getJSON(ctx, "/internal/v1/metrics/host", &result); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+func (c *Client) ContainerMetrics(ctx context.Context, containerID string) (domain.ContainerMetricSnapshot, error) {
+	var result domain.ContainerMetricSnapshot
+	path := "/internal/v1/metrics/container?containerId=" + url.QueryEscape(containerID)
+	if err := c.getJSON(ctx, path, &result); err != nil {
 		return result, err
 	}
 	return result, nil

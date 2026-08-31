@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log/slog"
 	"net"
@@ -26,6 +27,14 @@ func main() {
 		log.Error("load config", "error", err)
 		os.Exit(1)
 	}
+	initializeContext, cancelInitialize := context.WithTimeout(context.Background(), 15*time.Second)
+	agent, err := agentserver.New(initializeContext, cfg)
+	cancelInitialize()
+	if err != nil {
+		log.Error("initialize agent", "error", err)
+		os.Exit(1)
+	}
+	defer agent.Close()
 	if err := os.MkdirAll(filepath.Dir(cfg.Agent.SocketPath), 0o750); err != nil {
 		log.Error("create socket directory", "error", err)
 		os.Exit(1)
@@ -41,12 +50,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	agent, err := agentserver.New(cfg)
-	if err != nil {
-		log.Error("initialize agent", "error", err)
-		os.Exit(1)
-	}
-	defer agent.Close()
 	server := &http.Server{Handler: agent.Handler(), ReadHeaderTimeout: 5 * time.Second}
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)

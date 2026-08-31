@@ -173,7 +173,13 @@ paths:
       operationId: getJobMetrics
       parameters: [ { $ref: "#/components/parameters/JobId" } ]
       responses:
-        "200": { description: Recent job metric snapshots }
+        "200":
+          description: Recent cgroup v1 and GPU metric snapshots
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/JobMetricSnapshot" }
   /jobs/{jobId}/logs/stream:
     get:
       operationId: streamJobLogs
@@ -484,6 +490,50 @@ components:
         epoch: { type: integer, minimum: 0 }
         step: { type: integer, minimum: 0 }
         progress: { type: number, minimum: 0, maximum: 1 }
+    JobMetricSnapshot:
+      type: object
+      required: [sampledAt, cpuPercentById, memoryUsedBytes, memoryLimitBytes, memoryFailCount, oomUnder, blockIoReadBytes, blockIoWriteBytes, gpus, containers]
+      properties:
+        sampledAt: { type: string, format: date-time }
+        cpuPercentById:
+          type: object
+          additionalProperties: { type: number, minimum: 0 }
+        memoryUsedBytes: { type: integer, minimum: 0 }
+        memoryLimitBytes: { type: integer, minimum: 0 }
+        memoryFailCount: { type: integer, minimum: 0 }
+        oomUnder: { type: boolean }
+        blockIoReadBytes: { type: integer, minimum: 0 }
+        blockIoWriteBytes: { type: integer, minimum: 0 }
+        gpus:
+          type: array
+          items:
+            type: object
+            required: [uuid, utilizationPercent, memoryUsedBytes, memoryTotalBytes, temperatureCelsius, powerWatts]
+            properties:
+              uuid: { type: string }
+              utilizationPercent: { type: integer, minimum: 0, maximum: 100 }
+              memoryUsedBytes: { type: integer, minimum: 0 }
+              memoryTotalBytes: { type: integer, minimum: 0 }
+              temperatureCelsius: { type: integer }
+              powerWatts: { type: number }
+        containers:
+          type: array
+          items:
+            type: object
+            required: [containerId, cpuPercentById, memoryUsedBytes, memoryLimitBytes, memoryFailCount, oomUnder, cpuIds, numaNodes, blockIoReadBytes, blockIoWriteBytes]
+            properties:
+              containerId: { type: string }
+              cpuPercentById:
+                type: object
+                additionalProperties: { type: number, minimum: 0 }
+              memoryUsedBytes: { type: integer, minimum: 0 }
+              memoryLimitBytes: { type: integer, minimum: 0 }
+              memoryFailCount: { type: integer, minimum: 0 }
+              oomUnder: { type: boolean }
+              cpuIds: { type: array, items: { type: integer, minimum: 0 } }
+              numaNodes: { type: array, items: { type: integer, minimum: 0 } }
+              blockIoReadBytes: { type: integer, minimum: 0 }
+              blockIoWriteBytes: { type: integer, minimum: 0 }
     UnmanagedContainer:
       type: object
       required: [id, name, image, state, cpuUnbounded, gpuUnbounded]

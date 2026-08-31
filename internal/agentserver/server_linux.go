@@ -3,6 +3,7 @@
 package agentserver
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"gpu-scheduler/internal/executor"
 	"gpu-scheduler/internal/host"
 	"gpu-scheduler/internal/monitor"
+	"gpu-scheduler/internal/platform"
 )
 
 type Server struct {
@@ -19,12 +21,23 @@ type Server struct {
 	compose    *executor.Compose
 	validator  *executor.SecurityValidator
 	monitor    *monitor.LinuxCollector
+	platform   platform.Runtime
 	mux        *http.ServeMux
 }
 
-func New(cfg config.Config) (*Server, error) {
-	docker, err := executor.NewDocker()
+func New(ctx context.Context, cfg config.Config) (*Server, error) {
+	docker, err := executor.NewDocker(cfg.Agent.DockerSocket)
 	if err != nil {
+		return nil, err
+	}
+	info, version, err := docker.PlatformInfo(ctx)
+	if err != nil {
+		docker.Close()
+		return nil, err
+	}
+	target, err := platform.Validate(ctx, cfg.Agent.DockerSocket, info.Info, version)
+	if err != nil {
+		docker.Close()
 		return nil, err
 	}
 	validator, err := executor.NewSecurityValidator(cfg.Agent.AllowedMountRoots)
@@ -39,7 +52,7 @@ func New(cfg config.Config) (*Server, error) {
 	}
 	s := &Server{
 		discoverer: host.NewLinuxDiscoverer(), docker: docker, validator: validator,
-		compose: executor.NewCompose(docker, validator, cfg.Agent.StateDirectory), monitor: collector,
+		compose: executor.NewCompose(docker, validator, cfg.Agent.StateDirectory, cfg.Agent.DockerSocket), monitor: collector, platform: target,
 		mux: http.NewServeMux(),
 	}
 	s.routes()
@@ -58,6 +71,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /internal/v1/topology", s.discoverer.HandleTopology)
 	s.mux.HandleFunc("GET /internal/v1/images", s.images)
 	s.mux.HandleFunc("GET /internal/v1/metrics/host", s.metrics)
+	s.mux.HandleFunc("GET /internal/v1/metrics/container", s.containerMetrics)
 	s.mux.HandleFunc("GET /internal/v1/container-claims", s.claims)
 	s.mux.HandleFunc("POST /internal/v1/workloads/image", s.createImage)
 	s.mux.HandleFunc("POST /internal/v1/workloads/compose", s.createCompose)
@@ -67,12 +81,31 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /internal/v1/gpu-host-processes", s.hostGPUProcesses)
 }
 
+func (s *Server) containerMetrics(w http.ResponseWriter, r *http.Request) {
+	containerID := r.URL.Query().Get("containerId")
+	if containerID == "" {
+		writeJSON(w, 400, map[string]string{"error": "containerId required"})
+		return
+	}
+	pid, err := s.docker.ContainerPID(r.Context(), containerID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	snapshot, err := s.monitor.SampleContainer(containerID, pid)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, 200, snapshot)
+}
+
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	if err := s.docker.Ping(r.Context()); err != nil {
 		writeJSON(w, 503, map[string]any{"status": "degraded", "detail": err.Error()})
 		return
 	}
-	writeJSON(w, 200, map[string]string{"status": "ok"})
+	writeJSON(w, 200, map[string]any{"status": "ok", "platform": s.platform})
 }
 
 func (s *Server) images(w http.ResponseWriter, r *http.Request) {

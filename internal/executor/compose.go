@@ -7,17 +7,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+
+	"gpu-scheduler/internal/dockerhost"
 )
 
 type Compose struct {
-	docker    *Docker
-	validator *SecurityValidator
-	stateDir  string
+	docker     *Docker
+	validator  *SecurityValidator
+	stateDir   string
+	socketPath string
 }
 
 type EffectiveCompose struct {
@@ -26,8 +28,8 @@ type EffectiveCompose struct {
 	NormalizedDigest string
 }
 
-func NewCompose(docker *Docker, validator *SecurityValidator, stateDir string) *Compose {
-	return &Compose{docker: docker, validator: validator, stateDir: stateDir}
+func NewCompose(docker *Docker, validator *SecurityValidator, stateDir, socketPath string) *Compose {
+	return &Compose{docker: docker, validator: validator, stateDir: stateDir, socketPath: socketPath}
 }
 
 func (c *Compose) Prepare(ctx context.Context, request ComposeCreateRequest) (EffectiveCompose, error) {
@@ -39,7 +41,10 @@ func (c *Compose) Prepare(ctx context.Context, request ComposeCreateRequest) (Ef
 	if err != nil {
 		return EffectiveCompose{}, err
 	}
-	command := exec.CommandContext(ctx, "docker", "compose", "--project-directory", root, "-f", entry, "config", "--format", "json")
+	command, err := dockerhost.Command(ctx, c.socketPath, "compose", "--project-directory", root, "-f", entry, "config", "--format", "json")
+	if err != nil {
+		return EffectiveCompose{}, err
+	}
 	normalized, err := command.Output()
 	if err != nil {
 		return EffectiveCompose{}, fmt.Errorf("normalize compose: %w", err)
@@ -88,7 +93,10 @@ func (c *Compose) Prepare(ctx context.Context, request ComposeCreateRequest) (Ef
 }
 
 func (c *Compose) CreateAndStart(ctx context.Context, request ComposeCreateRequest, effective EffectiveCompose) (RuntimeRef, error) {
-	create := exec.CommandContext(ctx, "docker", "compose", "-p", request.ProjectName, "-f", effective.Path, "create")
+	create, err := dockerhost.Command(ctx, c.socketPath, "compose", "-p", request.ProjectName, "-f", effective.Path, "create")
+	if err != nil {
+		return RuntimeRef{}, err
+	}
 	if output, err := create.CombinedOutput(); err != nil {
 		_ = c.cleanupProject(ctx, request.ProjectName)
 		return RuntimeRef{}, fmt.Errorf("compose create: %w: %s", err, strings.TrimSpace(string(output)))
@@ -113,7 +121,11 @@ func (c *Compose) CreateAndStart(ctx context.Context, request ComposeCreateReque
 			return RuntimeRef{}, err
 		}
 	}
-	start := exec.CommandContext(ctx, "docker", "compose", "-p", request.ProjectName, "-f", effective.Path, "start")
+	start, err := dockerhost.Command(ctx, c.socketPath, "compose", "-p", request.ProjectName, "-f", effective.Path, "start")
+	if err != nil {
+		_ = c.cleanupProject(ctx, request.ProjectName)
+		return RuntimeRef{}, err
+	}
 	if output, err := start.CombinedOutput(); err != nil {
 		_ = c.cleanupProject(ctx, request.ProjectName)
 		return RuntimeRef{}, fmt.Errorf("compose start: %w: %s", err, strings.TrimSpace(string(output)))
@@ -158,7 +170,7 @@ func resolveComposeSource(source ComposeSource) (string, string, error) {
 func applyServicePlan(service map[string]any, plan ServicePlan, jobID, attemptID string) {
 	service["cpuset"] = formatIntList(plan.CPUIds)
 	service["mem_limit"] = plan.MemoryBytes
-	service["memswap_limit"] = plan.MemoryBytes
+	delete(service, "memswap_limit")
 	labels, _ := service["labels"].(map[string]any)
 	if labels == nil {
 		labels = make(map[string]any)

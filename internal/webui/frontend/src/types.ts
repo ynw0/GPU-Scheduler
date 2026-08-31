@@ -190,6 +190,12 @@ export interface ResourcePool {
 export interface JobMetricSnapshot {
   sampledAt: string
   cpuPercentById?: Record<string, number>
+  memoryUsedBytes: number
+  memoryLimitBytes: number
+  memoryFailCount: number
+  oomUnder: boolean
+  blockIoReadBytes: number
+  blockIoWriteBytes: number
   gpus?: Array<{
     uuid: string
     utilizationPercent: number

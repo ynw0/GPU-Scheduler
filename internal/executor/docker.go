@@ -11,6 +11,7 @@ import (
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 
+	"gpu-scheduler/internal/dockerhost"
 	"gpu-scheduler/internal/domain"
 	"gpu-scheduler/internal/inventory"
 )
@@ -19,8 +20,12 @@ type Docker struct {
 	client *client.Client
 }
 
-func NewDocker() (*Docker, error) {
-	cli, err := client.New(client.FromEnv)
+func NewDocker(socketPath string) (*Docker, error) {
+	host, err := dockerhost.URL(socketPath)
+	if err != nil {
+		return nil, err
+	}
+	cli, err := client.New(client.WithHost(host), client.WithAPIVersion(dockerhost.APIVersion))
 	if err != nil {
 		return nil, fmt.Errorf("create Docker client: %w", err)
 	}
@@ -32,6 +37,18 @@ func (d *Docker) Close() error { return d.client.Close() }
 func (d *Docker) Ping(ctx context.Context) error {
 	_, err := d.client.Ping(ctx, client.PingOptions{})
 	return err
+}
+
+func (d *Docker) PlatformInfo(ctx context.Context) (client.SystemInfoResult, client.ServerVersionResult, error) {
+	info, err := d.client.Info(ctx, client.InfoOptions{})
+	if err != nil {
+		return client.SystemInfoResult{}, client.ServerVersionResult{}, err
+	}
+	version, err := d.client.ServerVersion(ctx, client.ServerVersionOptions{})
+	if err != nil {
+		return client.SystemInfoResult{}, client.ServerVersionResult{}, err
+	}
+	return info, version, nil
 }
 
 func (d *Docker) ListImages(ctx context.Context) ([]domain.ImageInfo, error) {
@@ -69,7 +86,7 @@ func (d *Docker) CreateImage(ctx context.Context, request ImageCreateRequest) (R
 		Resources: container.Resources{
 			CpusetCpus: inventory.FormatCPUList(request.Plan.CPUIds),
 			CpusetMems: inventory.FormatCPUList(request.Plan.NUMANodes),
-			Memory:     int64(request.Plan.MemoryBytes), MemorySwap: int64(request.Plan.MemoryBytes),
+			Memory:     int64(request.Plan.MemoryBytes),
 		},
 		Mounts: mounts,
 		Init:   &initProcess,
@@ -101,6 +118,17 @@ func (d *Docker) CreateImage(ctx context.Context, request ImageCreateRequest) (R
 		return RuntimeRef{}, fmt.Errorf("start container: %w", err)
 	}
 	return RuntimeRef{Kind: "image", ContainerIDs: map[string]string{"main": response.ID}}, nil
+}
+
+func (d *Docker) ContainerPID(ctx context.Context, containerID string) (int, error) {
+	response, err := d.client.ContainerInspect(ctx, containerID, client.ContainerInspectOptions{})
+	if err != nil {
+		return 0, err
+	}
+	if response.Container.State == nil || response.Container.State.Pid <= 0 {
+		return 0, fmt.Errorf("container %s is not running", containerID)
+	}
+	return response.Container.State.Pid, nil
 }
 
 func (d *Docker) Stop(ctx context.Context, ref RuntimeRef, timeoutSeconds int) error {

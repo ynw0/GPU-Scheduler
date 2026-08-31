@@ -12,6 +12,13 @@ function statusLabel(status: string): string {
   return labels[status] ?? status
 }
 
+function formatBytes(value = 0): string {
+  if (!value) return '0 B'
+  if (value >= 1024 ** 3) return `${(value / 1024 ** 3).toFixed(1)} GB`
+  if (value >= 1024 ** 2) return `${(value / 1024 ** 2).toFixed(1)} MB`
+  return `${(value / 1024).toFixed(1)} KB`
+}
+
 export function JobDetail({
   job,
   onClose,
@@ -66,6 +73,11 @@ export function JobDetail({
             ))}
             <div className="job-metric-grid">
               <div className="plan-line"><span>CPU</span><strong>{cpuValues.length ? `${cpuAvg.toFixed(1)}%` : '—'}</strong></div>
+              <div className="plan-line"><span>内存</span><strong>{latest ? `${formatBytes(latest.memoryUsedBytes)} / ${formatBytes(latest.memoryLimitBytes)}` : '—'}</strong></div>
+              <div className="plan-line"><span>块设备读取</span><strong>{latest ? formatBytes(latest.blockIoReadBytes) : '—'}</strong></div>
+              <div className="plan-line"><span>块设备写入</span><strong>{latest ? formatBytes(latest.blockIoWriteBytes) : '—'}</strong></div>
+              {latest?.oomUnder && <div className="plan-conflict">容器当前处于 OOM 状态</div>}
+              {latest && latest.memoryFailCount > 0 && <div className="plan-conflict">内存分配失败计数 {latest.memoryFailCount}</div>}
               {(latest?.gpus ?? []).map((gpu) => (
                 <div className="plan-line" key={gpu.uuid}>
                   <span>GPU</span>

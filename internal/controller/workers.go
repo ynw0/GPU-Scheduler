@@ -224,43 +224,52 @@ func (s *Server) recordJobMetrics(ctx context.Context, snapshot domain.HostMetri
 		return
 	}
 	for _, job := range jobs {
+		attempt, err := s.store.LatestAttempt(ctx, job.ID)
+		if err != nil || len(attempt.ContainerIDs) == 0 {
+			continue
+		}
 		allocs, err := s.store.AllocationsForJob(ctx, job.ID)
 		if err != nil {
 			continue
 		}
-		filtered := filterJobSnapshot(snapshot, allocs)
-		if len(filtered.CPUPercentByID) == 0 && len(filtered.GPUs) == 0 {
+		metric := domain.JobMetricSnapshot{SampledAt: snapshot.SampledAt, CPUPercentByID: map[int]float64{}}
+		complete := true
+		for _, containerID := range attempt.ContainerIDs {
+			containerMetric, err := s.agent.ContainerMetrics(ctx, containerID)
+			if err != nil {
+				complete = false
+				break
+			}
+			metric.Containers = append(metric.Containers, containerMetric)
+			metric.MemoryUsedBytes += containerMetric.MemoryUsedBytes
+			metric.MemoryLimitBytes += containerMetric.MemoryLimitBytes
+			metric.MemoryFailCount += containerMetric.MemoryFailCount
+			metric.OOMUnder = metric.OOMUnder || containerMetric.OOMUnder
+			metric.BlockIOReadBytes += containerMetric.BlockIOReadBytes
+			metric.BlockIOWriteBytes += containerMetric.BlockIOWriteBytes
+			for id, percent := range containerMetric.CPUPercentByID {
+				metric.CPUPercentByID[id] += percent
+			}
+		}
+		if !complete {
 			continue
 		}
-		_ = s.store.InsertMetricSnapshot(ctx, "job", job.ID, filtered)
+		metric.GPUs = filterJobGPUs(snapshot.GPUs, allocs)
+		_ = s.store.InsertMetricSnapshot(ctx, "job", job.ID, metric)
 	}
 }
 
-func filterJobSnapshot(snapshot domain.HostMetricSnapshot, allocs []domain.Allocation) domain.HostMetricSnapshot {
-	cpuOK := map[int]struct{}{}
+func filterJobGPUs(gpus []domain.GPUMetric, allocs []domain.Allocation) []domain.GPUMetric {
 	gpuOK := map[string]struct{}{}
 	for _, alloc := range allocs {
-		switch alloc.ResourceType {
-		case "cpu":
-			if id, err := strconv.Atoi(alloc.ResourceID); err == nil {
-				cpuOK[id] = struct{}{}
-			}
-		case "gpu":
+		if alloc.ResourceType == "gpu" {
 			gpuOK[alloc.ResourceID] = struct{}{}
 		}
 	}
-	filtered := domain.HostMetricSnapshot{
-		SampledAt:      snapshot.SampledAt,
-		CPUPercentByID: map[int]float64{},
-	}
-	for id, percent := range snapshot.CPUPercentByID {
-		if _, ok := cpuOK[id]; ok {
-			filtered.CPUPercentByID[id] = percent
-		}
-	}
-	for _, gpu := range snapshot.GPUs {
+	filtered := make([]domain.GPUMetric, 0)
+	for _, gpu := range gpus {
 		if _, ok := gpuOK[gpu.UUID]; ok {
-			filtered.GPUs = append(filtered.GPUs, gpu)
+			filtered = append(filtered, gpu)
 		}
 	}
 	return filtered

@@ -13,22 +13,60 @@ import (
 
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
 
+	"gpu-scheduler/internal/cgroupv1"
 	"gpu-scheduler/internal/domain"
 )
 
 type cpuCounters struct{ total, idle uint64 }
 
+type containerCPUCounters struct {
+	sampledAt time.Time
+	usageByID map[int]uint64
+}
+
 type LinuxCollector struct {
-	mu        sync.Mutex
-	previous  map[int]cpuCounters
-	nvmlReady bool
+	mu         sync.Mutex
+	previous   map[int]cpuCounters
+	containers map[string]containerCPUCounters
+	nvmlReady  bool
 }
 
 func NewLinuxCollector() (*LinuxCollector, error) {
 	if ret := nvml.Init(); ret != nvml.SUCCESS {
 		return nil, fmt.Errorf("initialize NVML metrics: %s", nvml.ErrorString(ret))
 	}
-	return &LinuxCollector{previous: make(map[int]cpuCounters), nvmlReady: true}, nil
+	return &LinuxCollector{
+		previous: make(map[int]cpuCounters), containers: make(map[string]containerCPUCounters), nvmlReady: true,
+	}, nil
+}
+
+func (c *LinuxCollector) SampleContainer(containerID string, pid int) (domain.ContainerMetricSnapshot, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	raw, err := cgroupv1.Read(pid)
+	if err != nil {
+		return domain.ContainerMetricSnapshot{}, err
+	}
+	now := time.Now().UTC()
+	percentages := make(map[int]float64)
+	previous, exists := c.containers[containerID]
+	elapsed := now.Sub(previous.sampledAt)
+	if exists && elapsed > 0 {
+		for id, current := range raw.CPUUsageNSByID {
+			prior, ok := previous.usageByID[id]
+			if ok && current >= prior {
+				percentages[id] = float64(current-prior) * 100 / float64(elapsed.Nanoseconds())
+			}
+		}
+	}
+	c.containers[containerID] = containerCPUCounters{sampledAt: now, usageByID: raw.CPUUsageNSByID}
+	return domain.ContainerMetricSnapshot{
+		SampledAt: now, ContainerID: containerID, CPUPercentByID: percentages,
+		MemoryUsedBytes: raw.MemoryUsedBytes, MemoryLimitBytes: raw.MemoryLimitBytes,
+		MemoryFailCount: raw.MemoryFailCount, OOMUnder: raw.OOMUnder,
+		CPUIds: raw.CPUIds, NUMANodes: raw.NUMANodes,
+		BlockIOReadBytes: raw.BlockIOReadBytes, BlockIOWriteBytes: raw.BlockIOWriteBytes,
+	}, nil
 }
 
 func (c *LinuxCollector) Close() {

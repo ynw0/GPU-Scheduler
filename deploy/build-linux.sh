@@ -10,6 +10,16 @@ if [[ "$(go env GOOS)" != "linux" ]]; then
   exit 1
 fi
 
+source /etc/os-release
+if [[ "$ID" != "ubuntu" || "$VERSION_ID" != "20.04" ]]; then
+  echo "Production binaries must be built on Ubuntu 20.04." >&2
+  exit 1
+fi
+if [[ "$(ldd --version | head -n 1 | awk '{print $NF}')" != "2.31" ]]; then
+  echo "Production agent requires a glibc 2.31 build environment." >&2
+  exit 1
+fi
+
 mkdir -p "$output_dir"
 cd "$frontend_dir"
 pnpm install --frozen-lockfile
