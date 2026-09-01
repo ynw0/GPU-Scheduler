@@ -299,11 +299,8 @@ func validateJobSpec(spec domain.JobSpec, identity auth.Identity) error {
 	if strings.TrimSpace(spec.Name) == "" {
 		return errors.New("任务名称不能为空")
 	}
-	if spec.Priority == domain.PriorityEmergency && identity.Role != domain.RoleAdmin {
-		return errors.New("P0 仅管理员可用")
-	}
-	if spec.Priority == domain.PriorityHigh && identity.Role != domain.RoleAdmin && identity.Role != domain.RoleTeamOperator {
-		return errors.New("P1 仅团队管理员可用")
+	if spec.Priority == domain.PriorityEmergency && identity.Role != domain.RoleAdmin && identity.Role != domain.RoleTeamOperator {
+		return errors.New("P0 仅 TeamOperator 与 Admin 可用")
 	}
 	if spec.Workload.Kind == domain.WorkloadCompose {
 		if spec.Workload.ComposeSourceID == "" {

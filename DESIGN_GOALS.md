@@ -29,7 +29,7 @@ GPU Scheduler 是单机 AI 训练资源调度平台，不是通用 Docker 管理
 
 - `Viewer`：查看脱敏后的资源与任务状态。
 - `User`：创建和管理自己的任务。
-- `TeamOperator`：管理团队任务、P1 优先级和团队配额范围。
+- `TeamOperator`：管理团队任务、P0 优先级和团队配额范围。
 - `Admin`：系统、用户、Compose 来源、资源池和强制操作。
 - `Auditor`：只读审计。
 
@@ -46,7 +46,7 @@ GPU Scheduler 是单机 AI 训练资源调度平台，不是通用 Docker 管理
 ## 队列和配额
 
 - 优先级为 P0、P1、P2、P3，默认 P2。
-- P0 仅管理员，P1 仅 TeamOperator/Admin。
+- P0 仅 TeamOperator/Admin，P1 起 User 可用。
 - 不抢占运行任务，不跨优先级补位。
 - 同优先级允许可运行的小任务补位；任务最多被绕过 5 次，之后成为该优先级队列屏障。
 - 团队和用户分别设置 GPU、逻辑 CPU 与内存配额，任务必须同时满足两层约束。

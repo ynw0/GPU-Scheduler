@@ -4,7 +4,7 @@ import { Check, CircleGauge, Cpu, Gauge, HardDrive, LayoutGrid, X } from 'lucide
 import { api } from './api'
 import { cpuSelectable, selectedGPUNuma } from './numa'
 import { emptyImageFields, imageFieldsFromWorkload, JobImageFields, parseEnvironment, type ImageFields } from './JobImageFields'
-import type { ImageWorkload, JobPlan, JobSpec, ResourceRequest, Topology } from './types'
+import type { ImageWorkload, JobPlan, JobSpec, ResourceRequest, Topology, User } from './types'
 
 function emptyResources(): ResourceRequest {
   return { cpuMode: 'auto-cores', cpuCount: 8, gpuMode: 'auto', gpuCount: 1, memoryBytes: 64 * 1024 ** 3, numaPolicy: 'strict' }
@@ -18,8 +18,18 @@ function specResources(spec?: JobSpec): ResourceRequest {
   return spec.resources
 }
 
+function canUseP0(role?: User['role']): boolean {
+  return role === 'Admin' || role === 'TeamOperator'
+}
+
+function clampPriority(role: User['role'] | undefined, priority: JobSpec['priority']): JobSpec['priority'] {
+  if (priority === 'P0' && !canUseP0(role)) return 'P1'
+  return priority
+}
+
 export function NewJobDialog({ topology, initialSpec, onClose }: { topology?: Topology; initialSpec?: JobSpec; onClose: () => void }) {
   const queryClient = useQueryClient()
+  const me = useQuery({ queryKey: ['me'], queryFn: api.me, refetchInterval: false })
   const images = useQuery({ queryKey: ['images'], queryFn: api.images, refetchInterval: false })
   const sources = useQuery({ queryKey: ['compose-sources'], queryFn: api.composeSources, refetchInterval: false })
   const pools = useQuery({ queryKey: ['resource-pools'], queryFn: api.resourcePools, refetchInterval: false })
@@ -37,7 +47,7 @@ export function NewJobDialog({ topology, initialSpec, onClose }: { topology?: To
   const [composeFileName, setComposeFileName] = useState('compose.yaml')
   const [composeContent, setComposeContent] = useState('')
   const [serviceName, setServiceName] = useState(initialSpec?.workload.kind === 'compose' ? (initialSpec.workload.services[0]?.name ?? 'train') : 'train')
-  const [priority, setPriority] = useState<JobSpec['priority']>(initialSpec?.priority ?? 'P2')
+  const [priority, setPriority] = useState<JobSpec['priority']>(clampPriority(me.data?.role, initialSpec?.priority ?? 'P2'))
   const [resourcePoolId, setResourcePoolId] = useState(initialSpec?.resourcePoolId ?? '')
   const [templateName, setTemplateName] = useState('')
   const [loadTemplateId, setLoadTemplateId] = useState('')
@@ -86,7 +96,7 @@ export function NewJobDialog({ topology, initialSpec, onClose }: { topology?: To
   }
 
   const buildSpec = (): JobSpec => ({
-    name, priority,
+    name, priority: clampPriority(me.data?.role, priority),
     workload: kind === 'image' ? imageWorkload() : {
       kind: 'compose', composeSourceId,
       services: [{ name: serviceName, class: 'training', resources: resources() }],
@@ -99,7 +109,7 @@ export function NewJobDialog({ topology, initialSpec, onClose }: { topology?: To
   const applySpec = (spec: JobSpec) => {
     const next = specResources(spec)
     setName(spec.name)
-    setPriority(spec.priority)
+    setPriority(clampPriority(me.data?.role, spec.priority))
     setKind(spec.workload.kind)
     setResourcePoolId(spec.resourcePoolId ?? '')
     setStopGraceSeconds(spec.stopGraceSeconds || 30)
@@ -216,7 +226,10 @@ export function NewJobDialog({ topology, initialSpec, onClose }: { topology?: To
               </div>
               <div className="field-grid two">
                 <label>任务名称<input value={name} onChange={(event) => setName(event.target.value)} placeholder="experiment-a800-01" /></label>
-                <label>优先级<select value={priority} onChange={(event) => setPriority(event.target.value as JobSpec['priority'])}><option>P2</option><option>P3</option><option>P1</option><option>P0</option></select></label>
+                <label>优先级<select value={clampPriority(me.data?.role, priority)} onChange={(event) => setPriority(event.target.value as JobSpec['priority'])}>
+                  <option>P2</option><option>P3</option><option>P1</option>
+                  {canUseP0(me.data?.role) && <option>P0</option>}
+                </select></label>
               </div>
               <label>停止宽限（秒）<input type="number" min={1} value={stopGraceSeconds} onChange={(event) => { setStopGraceSeconds(Number(event.target.value)); setPlan(undefined) }} /></label>
               <label>资源池<select value={resourcePoolId} onChange={(event) => { setResourcePoolId(event.target.value); setPlan(undefined) }}>
