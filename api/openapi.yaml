@@ -60,7 +60,7 @@ paths:
               required: [currentPassword, newPassword]
               properties:
                 currentPassword: { type: string }
-                newPassword: { type: string, minLength: 12 }
+                newPassword: { type: string, minLength: 6 }
       responses:
         "204": { description: Password updated }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -386,7 +386,7 @@ paths:
               type: object
               required: [newPassword]
               properties:
-                newPassword: { type: string, minLength: 12 }
+                newPassword: { type: string, minLength: 6 }
       responses:
         "204": { description: Password reset }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -470,7 +470,7 @@ components:
       required: [username, password]
       properties:
         username: { type: string, minLength: 1 }
-        password: { type: string, minLength: 12 }
+        password: { type: string, minLength: 6 }
     User:
       type: object
       required: [id, username, role]

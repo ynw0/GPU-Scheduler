@@ -127,7 +127,7 @@ export function AdminPage({ role }: { role: User['role'] }) {
             <label>
               密码
               <input type="password" value={userForm.password} onChange={(event) => setUserForm({ ...userForm, password: event.target.value })} />
-              <small className="field-hint">密码不少于配置下限（至少 12 位）</small>
+              <small className="field-hint">密码不少于配置下限</small>
             </label>
             <label>
               邮箱

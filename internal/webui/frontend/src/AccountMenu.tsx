@@ -56,7 +56,7 @@ export function AccountMenu({ user }: { user: User }) {
               <label>
                 新密码
                 <input type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
-                <small className="field-hint">密码不少于配置下限（至少 12 位）</small>
+                <small className="field-hint">密码不少于配置下限</small>
               </label>
               {done && <div className="plan-status ok">{done}</div>}
               {change.error && <div className="plan-conflict">{String(change.error.message)}</div>}

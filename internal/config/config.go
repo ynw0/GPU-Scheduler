@@ -90,8 +90,8 @@ func (c Config) Validate() error {
 		return errors.New("agent.socket_path is required")
 	case c.Agent.DockerSocket == "":
 		return errors.New("agent.docker_socket is required")
-	case c.Security.PasswordMinLength < 12:
-		return errors.New("security.password_min_length must be at least 12")
+	case c.Security.PasswordMinLength < 6:
+		return errors.New("security.password_min_length must be at least 6")
 	case c.Retention.RawMetricDays <= 0 || c.Retention.RollupMetricDays <= 0:
 		return errors.New("retention days must be positive")
 	}

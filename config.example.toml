@@ -18,7 +18,7 @@ allowed_mount_roots = ["/data", "/workspace", "/mnt/disk", "/var/lib/gpu-schedul
 master_key_path = "/etc/gpu-scheduler/master.key"
 session_idle_hours = 12
 session_absolute_hours = 168
-password_min_length = 12
+password_min_length = 6
 
 [retention]
 raw_metric_days = 7
