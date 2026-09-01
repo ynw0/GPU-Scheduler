@@ -79,6 +79,8 @@ export const api = {
   createComposeSource: (value: { name: string; rootPath: string; entryFile: string }) => mutate<ComposeSource>('/compose-sources', 'POST', value),
   createComposeFromPath: (value: { name: string; filePath: string }) => mutate<ComposeSource>('/compose-sources/from-path', 'POST', value),
   uploadCompose: (value: { name: string; fileName: string; content: string }) => mutate<ComposeSource>('/compose-sources/upload', 'POST', value),
+  updateComposeSource: (id: string, value: { name: string; rootPath: string; entryFile: string; enabled: boolean }) =>
+    mutate<void>(`/compose-sources/${id}`, 'PATCH', value),
   hostContainers: () => request<HostContainer[]>('/unmanaged-containers'),
   patchHostContainer: (id: string, priority: Job['priority']) => mutate<void>(`/unmanaged-containers/${id}`, 'PATCH', { priority }),
   stopHostContainer: (id: string) => mutate<void>(`/unmanaged-containers/${id}/stop`, 'POST'),
@@ -91,6 +93,7 @@ export const api = {
   upsertQuota: (value: Quota) => mutate<Quota>('/quotas', 'POST', value),
   createResourcePool: (value: { name: string; cpuIds: number[]; gpuUuids: string[]; numaNodes: number[]; shared: boolean }) => mutate<ResourcePool>('/resource-pools', 'POST', value),
   createTemplate: (name: string, spec: JobSpec) => mutate<Template>('/templates', 'POST', { name, spec }),
+  updateTemplate: (id: string, name: string, spec: JobSpec) => mutate<void>(`/templates/${id}`, 'PATCH', { name, spec }),
   platform: () => request<{ allowedMountRoots: string[] }>('/platform'),
   markNotificationRead: (id: string) => mutate<void>(`/notifications/${id}`, 'PATCH'),
 }

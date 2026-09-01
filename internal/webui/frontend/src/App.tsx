@@ -97,6 +97,7 @@ export function App() {
   const running = (jobs.data ?? []).filter((job) => job.state === 'RUNNING')
   const queued = (jobs.data ?? []).filter((job) => job.state === 'QUEUED')
   const isOffline = health.data?.agent === 'offline'
+  const canWrite = me.data.role === 'Admin' || me.data.role === 'TeamOperator' || me.data.role === 'User'
 
   return (
     <div className="shell">
@@ -143,7 +144,9 @@ export function App() {
             <button className="icon-button" onClick={() => void topology.refetch()} aria-label="刷新">
               <RefreshCw size={17} />
             </button>
-            <button className="primary-action" onClick={() => { setJobDraft(undefined); setNewJobOpen(true) }}><Plus size={17} />新建任务</button>
+            {canWrite && (
+              <button className="primary-action" onClick={() => { setJobDraft(undefined); setNewJobOpen(true) }}><Plus size={17} />新建任务</button>
+            )}
           </div>
         </header>
 
@@ -180,6 +183,8 @@ export function App() {
             jobs={jobs.data ?? []}
             runningCount={running.length}
             queueCount={queued.length}
+            onShowAll={() => setSection('jobs')}
+            onOpenJob={setSelectedJobId}
           />
         )}
         {section !== 'overview' && (
@@ -192,6 +197,7 @@ export function App() {
             onOpenJob={setSelectedJobId}
             onUseTemplate={(spec) => { setJobDraft(spec); setNewJobOpen(true) }}
             onAction={(id, name) => action.mutate({ id, name })}
+            canWrite={canWrite}
           />
         )}
       </main>
@@ -216,6 +222,7 @@ export function App() {
       {selectedJob.data && (
         <JobDetail
           job={selectedJob.data}
+          canWrite={canWrite}
           onClose={() => setSelectedJobId(undefined)}
           onAction={(name) => action.mutate({ id: selectedJob.data!.id, name })}
           onClone={(spec) => {
@@ -276,6 +283,8 @@ function Overview({
   jobs,
   runningCount,
   queueCount,
+  onShowAll,
+  onOpenJob,
 }: {
   topology?: Topology
   freeCPUIds: Set<number>
@@ -283,6 +292,8 @@ function Overview({
   jobs: Job[]
   runningCount: number
   queueCount: number
+  onShowAll: () => void
+  onOpenJob: (id: string) => void
 }) {
   const totalMemory = topology?.numaNodes.reduce((sum, node) => sum + node.memoryBytes, 0) ?? 0
   const freeGPUs = topology?.gpus.filter((gpu) => freeGPUUUIDs.has(gpu.uuid)).length ?? 0
@@ -340,11 +351,11 @@ function Overview({
       <section className="jobs-panel">
         <div className="section-heading compact">
           <div><p className="eyebrow">WORKLOADS</p><h2>当前训练任务</h2></div>
-          <button className="text-button">查看全部 <ChevronRight size={15} /></button>
+          <button className="text-button" onClick={onShowAll}>查看全部 <ChevronRight size={15} /></button>
         </div>
         <div className="job-table">
           <div className="job-row header"><span>任务</span><span>状态</span><span>优先级</span><span>更新时间</span></div>
-          {jobs.slice(0, 6).map((job) => <JobRow key={job.id} job={job} />)}
+          {jobs.slice(0, 6).map((job) => <JobRow key={job.id} job={job} onOpen={onOpenJob} />)}
           {!jobs.length && <div className="empty-row"><CircleGauge size={21} /><span>当前没有可见任务</span></div>}
         </div>
       </section>
@@ -404,9 +415,9 @@ function GpuCard({ gpu, free }: { gpu: GPU; free: boolean }) {
   )
 }
 
-function JobRow({ job }: { job: Job }) {
+function JobRow({ job, onOpen }: { job: Job; onOpen: (id: string) => void }) {
   return (
-    <div className="job-row">
+    <div className="job-row" style={{ cursor: 'pointer' }} onClick={() => onOpen(job.id)}>
       <span className="job-name"><i />{job.name}</span>
       <span><b className={`status-pill status-${job.state.toLowerCase()}`}>{statusLabel(job.state)}</b></span>
       <span className="priority">{job.priority}</span>
@@ -420,7 +431,7 @@ function EmptyTopology() {
 }
 
 function SectionContent({
-  section, jobs, role, templates, gpus, onOpenJob, onUseTemplate, onAction,
+  section, jobs, role, templates, gpus, onOpenJob, onUseTemplate, onAction, canWrite,
 }: {
   section: Section
   jobs: Job[]
@@ -430,6 +441,7 @@ function SectionContent({
   onOpenJob: (id: string) => void
   onUseTemplate: (spec: JobSpec) => void
   onAction: (id: string, name: 'start' | 'stop' | 'cancel' | 'retry') => void
+  canWrite: boolean
 }) {
   if (section === 'admin') return <AdminPage role={role} />
   if (section === 'host') return <HostContainersPage role={role} gpus={gpus} onOpenJob={onOpenJob} />
@@ -447,7 +459,7 @@ function SectionContent({
               <span>{item.spec.workload.kind}</span>
               <span className="muted">{new Date(item.updatedAt).toLocaleString('zh-CN')}</span>
               <span>
-                <button className="text-button" onClick={() => onUseTemplate(item.spec)}>使用</button>
+                {canWrite && <button className="text-button" onClick={() => onUseTemplate(item.spec)}>使用</button>}
               </span>
             </div>
           ))}
@@ -472,9 +484,9 @@ function SectionContent({
             <span className="priority">{job.priority}</span>
             <span className="muted">{new Date(job.createdAt).toLocaleString('zh-CN')}</span>
             <span>
-              {job.state === 'RUNNING' && <button className="text-button" onClick={(event) => { event.stopPropagation(); onAction(job.id, 'stop') }}>停止</button>}
-              {job.state === 'QUEUED' && <button className="text-button" onClick={(event) => { event.stopPropagation(); onAction(job.id, 'cancel') }}>取消</button>}
-              {job.state === 'FAILED' && <button className="text-button" onClick={(event) => { event.stopPropagation(); onAction(job.id, 'retry') }}>重试</button>}
+              {canWrite && job.state === 'RUNNING' && <button className="text-button" onClick={(event) => { event.stopPropagation(); onAction(job.id, 'stop') }}>停止</button>}
+              {canWrite && job.state === 'QUEUED' && <button className="text-button" onClick={(event) => { event.stopPropagation(); onAction(job.id, 'cancel') }}>取消</button>}
+              {canWrite && job.state === 'FAILED' && <button className="text-button" onClick={(event) => { event.stopPropagation(); onAction(job.id, 'retry') }}>重试</button>}
             </span>
           </div>
         ))}

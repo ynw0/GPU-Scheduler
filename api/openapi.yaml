@@ -120,6 +120,22 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/UnmanagedContainer" }
+  /unmanaged-containers/{id}:
+    patch:
+      operationId: patchUnmanagedContainer
+      parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [priority]
+              properties:
+                priority: { type: string, enum: [P0, P1, P2, P3] }
+      responses:
+        "204": { description: Priority updated }
+        "409": { description: Managed container }
   /unmanaged-containers/{id}/stop:
     post:
       operationId: stopUnmanagedContainer
@@ -268,6 +284,37 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/ComposeSourceWrite" }
+      responses:
+        "201": { description: Created }
+  /compose-sources/from-path:
+    post:
+      operationId: createComposeSourceFromPath
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filePath]
+              properties:
+                name: { type: string }
+                filePath: { type: string }
+      responses:
+        "201": { description: Created }
+  /compose-sources/upload:
+    post:
+      operationId: uploadComposeSource
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                name: { type: string }
+                fileName: { type: string }
+                content: { type: string }
       responses:
         "201": { description: Created }
   /compose-sources/{id}:

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
 import { cpuSelectable, resourceNuma, selectedGPUNuma } from './numa'
-import type { User } from './types'
+import type { ComposeSource, User } from './types'
 
 export function AdminPage({ role }: { role: User['role'] }) {
   const queryClient = useQueryClient()
@@ -15,7 +15,7 @@ export function AdminPage({ role }: { role: User['role'] }) {
   const topology = useQuery({ queryKey: ['topology'], queryFn: api.topology, enabled: role === 'Admin' && tab === 'pools' })
   const audit = useQuery({ queryKey: ['audit'], queryFn: api.auditEvents, enabled: role === 'Admin' || role === 'Auditor' })
   const me = useQuery({ queryKey: ['me'], queryFn: api.me })
-  const [userForm, setUserForm] = useState({ username: '', password: '', role: 'User' as User['role'], teamId: '' })
+  const [userForm, setUserForm] = useState({ username: '', password: '', email: '', role: 'User' as User['role'], teamId: '' })
   const [userCreated, setUserCreated] = useState('')
   const [teamName, setTeamName] = useState('')
   const [sourceForm, setSourceForm] = useState({ name: '', rootPath: '', entryFile: 'compose.yaml' })
@@ -27,16 +27,17 @@ export function AdminPage({ role }: { role: User['role'] }) {
 
   const createUser = useMutation({
     mutationFn: () => {
-      const payload: { username: string; password: string; role: User['role']; teamId?: string } = {
+      const payload: { username: string; password: string; role: User['role']; email?: string; teamId?: string } = {
         username: userForm.username, password: userForm.password, role: userForm.role,
       }
+      if (userForm.email.trim()) payload.email = userForm.email.trim()
       if (userForm.teamId) payload.teamId = userForm.teamId
       return api.createUser(payload)
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['users'] })
       setUserCreated(`用户 ${userForm.username} 已创建`)
-      setUserForm({ username: '', password: '', role: 'User', teamId: '' })
+      setUserForm({ username: '', password: '', email: '', role: 'User', teamId: '' })
     },
     onMutate: () => setUserCreated(''),
   })
@@ -52,6 +53,12 @@ export function AdminPage({ role }: { role: User['role'] }) {
   const createSource = useMutation({
     mutationFn: () => api.createComposeSource(sourceForm),
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['compose-sources'] }); setSourceForm({ name: '', rootPath: '', entryFile: 'compose.yaml' }) },
+  })
+  const updateSource = useMutation({
+    mutationFn: (item: ComposeSource) => api.updateComposeSource(item.id, {
+      name: item.name, rootPath: item.rootPath, entryFile: item.entryFile, enabled: !item.enabled,
+    }),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['compose-sources'] }) },
   })
   const saveQuota = useMutation({
     mutationFn: () => api.upsertQuota({
@@ -118,6 +125,11 @@ export function AdminPage({ role }: { role: User['role'] }) {
               密码
               <input type="password" value={userForm.password} onChange={(event) => setUserForm({ ...userForm, password: event.target.value })} />
               <small className="field-hint">密码不少于配置下限（至少 12 位）</small>
+            </label>
+            <label>
+              邮箱
+              <input type="email" value={userForm.email} onChange={(event) => setUserForm({ ...userForm, email: event.target.value })} />
+              <small className="field-hint">可选。开了 SMTP 时通知发到这个地址</small>
             </label>
             <label>角色<select value={userForm.role} onChange={(event) => setUserForm({ ...userForm, role: event.target.value as User['role'] })}>
               <option>User</option><option>TeamOperator</option><option>Admin</option><option>Viewer</option><option>Auditor</option>
@@ -220,7 +232,24 @@ export function AdminPage({ role }: { role: User['role'] }) {
             <label>入口文件<input value={sourceForm.entryFile} onChange={(event) => setSourceForm({ ...sourceForm, entryFile: event.target.value })} /></label>
             <button className="primary-action" type="submit" disabled={!sourceForm.name || !sourceForm.rootPath}>登记来源</button>
           </form>
-          <div className="full-job-table">{(sources.data ?? []).map((item) => <div className="full-job-row" key={item.id}><span>{item.name}</span><span className="muted">{item.rootPath}</span><span>{item.enabled ? '启用' : '停用'}</span></div>)}</div>
+          <div>
+            {updateSource.error && <div className="plan-conflict">{String(updateSource.error.message)}</div>}
+            <div className="full-job-table">{(sources.data ?? []).map((item) => (
+              <div className="full-job-row" key={item.id}>
+                <span>{item.name}</span>
+                <span className="muted">{item.rootPath}</span>
+                <span>{item.enabled ? '启用' : '停用'}</span>
+                <button
+                  type="button"
+                  className="text-button"
+                  disabled={updateSource.isPending}
+                  onClick={() => updateSource.mutate(item)}
+                >
+                  {item.enabled ? '停用' : '启用'}
+                </button>
+              </div>
+            ))}</div>
+          </div>
         </div>
       )}
       {tab === 'pools' && role === 'Admin' && (

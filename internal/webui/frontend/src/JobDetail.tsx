@@ -38,11 +38,13 @@ function cpuLabel(resources: ResourceRequest): string {
 
 export function JobDetail({
   job,
+  canWrite,
   onClose,
   onAction,
   onClone,
 }: {
   job: Job
+  canWrite: boolean
   onClose: () => void
   onAction: (name: 'start' | 'stop' | 'cancel' | 'retry') => void
   onClone: (spec: JobSpec) => void
@@ -105,6 +107,9 @@ export function JobDetail({
             {(job.allocations ?? []).map((item) => (
               <div className="plan-line" key={item.id}><span>{item.resourceType}</span><strong>{item.resourceId}</strong></div>
             ))}
+            {Object.entries(job.attempt?.containerIds ?? {}).map(([service, id]) => (
+              <div className="plan-line" key={service}><span>容器 {service}</span><strong>{id}</strong></div>
+            ))}
             {job.spec && <JobSpecView spec={job.spec} />}
             <div className="job-metric-grid">
               <div className="plan-line"><span>CPU</span><strong>{cpuValues.length ? `${cpuAvg.toFixed(1)}%` : '—'}</strong></div>
@@ -120,13 +125,15 @@ export function JobDetail({
                 </div>
               ))}
             </div>
-            <div className="dialog-actions">
-              {job.spec && <button className="secondary-action" onClick={() => onClone(job.spec!)}>再开一次</button>}
-              {job.state === 'QUEUED' && <button className="secondary-action" onClick={() => onAction('start')}>立即调度</button>}
-              {(job.state === 'RUNNING' || job.state === 'DEGRADED' || job.state === 'DRIFTED') && <button className="secondary-action" onClick={() => onAction('stop')}>停止</button>}
-              {['QUEUED', 'RESERVED', 'RUNNING', 'CREATING', 'STARTING', 'DEGRADED', 'DRIFTED'].includes(job.state) && <button className="secondary-action" onClick={() => onAction('cancel')}>取消</button>}
-              {job.state === 'FAILED' && <button className="primary-action" onClick={() => onAction('retry')}>重试</button>}
-            </div>
+            {canWrite && (
+              <div className="dialog-actions">
+                {job.spec && <button className="secondary-action" onClick={() => onClone(job.spec!)}>再开一次</button>}
+                {job.state === 'QUEUED' && <button className="secondary-action" onClick={() => onAction('start')}>立即调度</button>}
+                {(job.state === 'RUNNING' || job.state === 'DEGRADED' || job.state === 'DRIFTED') && <button className="secondary-action" onClick={() => onAction('stop')}>停止</button>}
+                {['QUEUED', 'RESERVED', 'RUNNING', 'CREATING', 'STARTING', 'DEGRADED', 'DRIFTED'].includes(job.state) && <button className="secondary-action" onClick={() => onAction('cancel')}>取消</button>}
+                {job.state === 'FAILED' && <button className="primary-action" onClick={() => onAction('retry')}>重试</button>}
+              </div>
+            )}
           </div>
           <aside className="plan-column">
             <p className="eyebrow">RUNTIME LOG</p>
@@ -183,6 +190,7 @@ function JobSpecView({ spec }: { spec: JobSpec }) {
       <div className="plan-line"><span>GPU</span><strong>{gpuLabel(resources)}</strong></div>
       <div className="plan-line"><span>CPU</span><strong>{cpuLabel(resources)}</strong></div>
       <div className="plan-line"><span>内存</span><strong>{formatBytes(resources.memoryBytes)}</strong></div>
+      <div className="plan-line"><span>停止宽限</span><strong>{spec.stopGraceSeconds}s</strong></div>
     </div>
   )
 }

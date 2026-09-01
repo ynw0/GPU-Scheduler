@@ -41,6 +41,9 @@ export function NewJobDialog({ topology, initialSpec, onClose }: { topology?: To
   const [resourcePoolId, setResourcePoolId] = useState(initialSpec?.resourcePoolId ?? '')
   const [templateName, setTemplateName] = useState('')
   const [loadTemplateId, setLoadTemplateId] = useState('')
+  const [activeTemplateId, setActiveTemplateId] = useState('')
+  const [activeTemplateName, setActiveTemplateName] = useState('')
+  const [stopGraceSeconds, setStopGraceSeconds] = useState(initialSpec?.stopGraceSeconds || 30)
   const [gpuMode, setGpuMode] = useState<ResourceRequest['gpuMode']>(seed.gpuMode)
   const [gpuCount, setGpuCount] = useState(seed.gpuCount)
   const [selectedGPUs, setSelectedGPUs] = useState<string[]>(seed.gpuUuids ?? [])
@@ -90,7 +93,7 @@ export function NewJobDialog({ topology, initialSpec, onClose }: { topology?: To
     },
     resources: kind === 'image' ? resources() : emptyResources(),
     ...(resourcePoolId ? { resourcePoolId } : {}),
-    stopGraceSeconds: 30,
+    stopGraceSeconds,
   })
 
   const applySpec = (spec: JobSpec) => {
@@ -99,6 +102,7 @@ export function NewJobDialog({ topology, initialSpec, onClose }: { topology?: To
     setPriority(spec.priority)
     setKind(spec.workload.kind)
     setResourcePoolId(spec.resourcePoolId ?? '')
+    setStopGraceSeconds(spec.stopGraceSeconds || 30)
     setGpuMode(next.gpuMode)
     setGpuCount(next.gpuCount)
     setSelectedGPUs(next.gpuUuids ?? [])
@@ -162,10 +166,16 @@ export function NewJobDialog({ topology, initialSpec, onClose }: { topology?: To
   })
   const saveTemplate = useMutation({
     mutationFn: () => api.createTemplate(templateName.trim(), buildSpec()),
-    onSuccess: () => {
+    onSuccess: (item) => {
       void queryClient.invalidateQueries({ queryKey: ['templates'] })
       setTemplateName('')
+      setActiveTemplateId(item.id)
+      setActiveTemplateName(item.name)
     },
+  })
+  const overwriteTemplate = useMutation({
+    mutationFn: () => api.updateTemplate(activeTemplateId, activeTemplateName, buildSpec()),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['templates'] }) },
   })
 
   const toggleGPU = (uuid: string) => {
@@ -208,6 +218,7 @@ export function NewJobDialog({ topology, initialSpec, onClose }: { topology?: To
                 <label>任务名称<input value={name} onChange={(event) => setName(event.target.value)} placeholder="experiment-a800-01" /></label>
                 <label>优先级<select value={priority} onChange={(event) => setPriority(event.target.value as JobSpec['priority'])}><option>P2</option><option>P3</option><option>P1</option><option>P0</option></select></label>
               </div>
+              <label>停止宽限（秒）<input type="number" min={1} value={stopGraceSeconds} onChange={(event) => { setStopGraceSeconds(Number(event.target.value)); setPlan(undefined) }} /></label>
               <label>资源池<select value={resourcePoolId} onChange={(event) => { setResourcePoolId(event.target.value); setPlan(undefined) }}>
                 <option value="">不限制（全机可分配资源）</option>
                 {(pools.data ?? []).map((pool) => (
@@ -218,7 +229,11 @@ export function NewJobDialog({ topology, initialSpec, onClose }: { topology?: To
                 <label>从模板加载<select value={loadTemplateId} onChange={(event) => {
                   const item = (templates.data ?? []).find((template) => template.id === event.target.value)
                   setLoadTemplateId('')
-                  if (item) applySpec(item.spec)
+                  if (item) {
+                    applySpec(item.spec)
+                    setActiveTemplateId(item.id)
+                    setActiveTemplateName(item.name)
+                  }
                 }}>
                   <option value="">选择模板</option>
                   {(templates.data ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
@@ -232,7 +247,17 @@ export function NewJobDialog({ topology, initialSpec, onClose }: { topology?: To
                   </span>
                 </label>
               </div>
-              {saveTemplate.error && <div className="plan-conflict">{String(saveTemplate.error.message)}</div>}
+              {activeTemplateId && (
+                <button
+                  type="button"
+                  className="text-button"
+                  disabled={overwriteTemplate.isPending || !name.trim()}
+                  onClick={() => overwriteTemplate.mutate()}
+                >
+                  {overwriteTemplate.isPending ? '覆盖中…' : `覆盖模板「${activeTemplateName}」`}
+                </button>
+              )}
+              {(saveTemplate.error || overwriteTemplate.error) && <div className="plan-conflict">{String((saveTemplate.error ?? overwriteTemplate.error)?.message)}</div>}
               {kind === 'image' ? (
                 <JobImageFields
                   images={images.data ?? []}
@@ -288,6 +313,7 @@ export function NewJobDialog({ topology, initialSpec, onClose }: { topology?: To
               <div className="plan-line"><span><LayoutGrid size={15} />NUMA</span><strong>{plan.numaNodes.join(', ') || '—'}</strong></div>
               <div className="plan-line"><span><HardDrive size={15} />内存</span><strong>{`${memoryGB} GB`}</strong></div>
               {plan.conflicts.map((conflict) => <div className="plan-conflict" key={conflict}>{conflict}</div>)}
+              {(plan.warnings ?? []).map((warning) => <small className="field-hint" key={warning}>{warning}</small>)}
             </>}
             {plan && !planCurrent && <div className="plan-conflict">配置已经变化，请重新执行资源预检。</div>}
             {(preview.error || create.error) && <div className="plan-conflict">请求失败：{String((preview.error ?? create.error)?.message)}</div>}
