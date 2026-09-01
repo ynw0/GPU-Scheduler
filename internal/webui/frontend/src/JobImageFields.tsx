@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import type { ImageInfo, ImageWorkload, Mount, PortPublish } from './types'
+import { matchCatalogImage, parseDockerRun } from './parseDockerRun'
 
 function formatBytes(value = 0): string {
   if (!value) return '0 GB'
@@ -67,9 +69,47 @@ export function JobImageFields({
   const setPort = (index: number, patch: Partial<PortPublish>) => {
     set({ ports: value.ports.map((item, i) => i === index ? { ...item, ...patch } : item) })
   }
+  const [dockerRun, setDockerRun] = useState('')
+  const [parseError, setParseError] = useState('')
+  const [parseNotes, setParseNotes] = useState<string[]>([])
+
+  const fillFromDockerRun = () => {
+    const result = parseDockerRun(dockerRun)
+    if (result.error) {
+      setParseError(result.error)
+      setParseNotes([])
+      return
+    }
+    const next = { ...value, ...result.fields }
+    const notes: string[] = []
+    let filledImage = false
+    if (result.image) {
+      const catalog = matchCatalogImage(result.image, images)
+      if (catalog) {
+        next.image = catalog
+        filledImage = true
+      } else notes.push(`识别到镜像 ${result.image}，本机列表没有`)
+    }
+    onChange(next)
+    if (result.memoryGB) onMemory(result.memoryGB)
+    const applied = filledImage ? result.applied : result.applied.filter((item) => item !== '镜像')
+    if (applied.length) notes.push(`已填写：${applied.join('、')}`)
+    if (result.ignored.length) notes.push(`已忽略（以本页 CPU/GPU 设置为准）：${result.ignored.join('、')}`)
+    if (result.unknown.length) notes.push(`未识别、未采用：${result.unknown.join('、')}`)
+    setParseError('')
+    setParseNotes(notes)
+  }
 
   return (
     <>
+      <label>
+        从 docker run 填入
+        <small>只用来识别填写下面的字段，不会执行这条命令。CPU / GPU 始终以本页资源设置为准。</small>
+        <textarea value={dockerRun} onChange={(event) => setDockerRun(event.target.value)} rows={5} placeholder="docker run --rm -e FOO=1 -v /mnt/disk/exp:/data image:tag python train.py" />
+      </label>
+      <button type="button" className="secondary-action" onClick={fillFromDockerRun}>识别填写</button>
+      {parseError && <div className="plan-conflict">{parseError}</div>}
+      {parseNotes.map((note) => <small className="field-hint" key={note}>{note}</small>)}
       <label>本机镜像<select value={value.image} onChange={(event) => set({ image: event.target.value })}>
         <option value="">选择 Docker Image</option>
         {images.map((item) => (
