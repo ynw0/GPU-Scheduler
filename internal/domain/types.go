@@ -286,6 +286,8 @@ type ContainerClaim struct {
 	GPUActivity        bool      `json:"gpuActivity"`
 	OOMUnder           bool      `json:"oomUnder"`
 	HeartbeatMounted   bool      `json:"heartbeatMounted,omitempty"`
+	MemoryUsedBytes    uint64    `json:"memoryUsedBytes,omitempty"`
+	MemoryLimitBytes   uint64    `json:"memoryLimitBytes,omitempty"`
 }
 
 type DiscoveredContainer struct {

@@ -143,8 +143,7 @@ func (s *Server) claims(w http.ResponseWriter, r *http.Request) {
 	}
 	compute, err := s.monitor.GPUCompute()
 	if err != nil {
-		writeError(w, err)
-		return
+		compute = monitor.GPUCompute{ByContainer: map[string][]string{}}
 	}
 	for i := range claims {
 		for containerID, uuids := range compute.ByContainer {
@@ -167,6 +166,8 @@ func (s *Server) enrichRuntime(containerID string, claim *domain.ContainerClaim)
 		return
 	}
 	claim.OOMUnder = sample.OOMUnder
+	claim.MemoryUsedBytes = sample.MemoryUsedBytes
+	claim.MemoryLimitBytes = sample.MemoryLimitBytes
 	for _, percent := range sample.CPUPercentByID {
 		if percent >= 0.5 {
 			claim.CPUActivity = true

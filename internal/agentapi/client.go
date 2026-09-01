@@ -43,8 +43,11 @@ func (c *Client) Images(ctx context.Context) ([]domain.ImageInfo, error) {
 
 func (c *Client) Claims(ctx context.Context) ([]domain.ContainerClaim, error) {
 	var result []domain.ContainerClaim
-	if err := c.getJSON(ctx, "/internal/v1/container-claims", &result); err != nil {
+	if err := c.getJSONClient(ctx, c.longClient, "/internal/v1/container-claims", &result); err != nil {
 		return nil, err
+	}
+	if result == nil {
+		result = []domain.ContainerClaim{}
 	}
 	return result, nil
 }
@@ -149,8 +152,12 @@ func (c *Client) Logs(ctx context.Context, containerID string, follow bool) (io.
 }
 
 func (c *Client) getJSON(ctx context.Context, path string, target any) error {
+	return c.getJSONClient(ctx, c.httpClient, path, target)
+}
+
+func (c *Client) getJSONClient(ctx context.Context, httpClient *http.Client, path string, target any) error {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://agent"+path, nil)
-	resp, err := c.httpClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	}

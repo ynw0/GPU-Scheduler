@@ -199,30 +199,42 @@ func (d *Docker) DiscoverContainerClaims(ctx context.Context) ([]domain.Containe
 	}
 	claims := make([]domain.ContainerClaim, 0, len(response.Items))
 	for _, item := range response.Items {
-		inspect, err := d.client.ContainerInspect(ctx, item.ID, client.ContainerInspectOptions{})
+		claim, err := d.claimFrom(ctx, item)
 		if err != nil {
-			return nil, err
+			continue
 		}
-		info := inspect.Container
-		if info.State == nil {
-			return nil, fmt.Errorf("container %s has no state", item.ID)
-		}
-		if info.HostConfig == nil {
-			return nil, fmt.Errorf("container %s has no host config", item.ID)
-		}
-		claim := domain.ContainerClaim{
-			ContainerID: item.ID, Name: strings.TrimPrefix(firstName(item.Names), "/"), Image: item.Image,
-			State: string(item.State), ExitCode: info.State.ExitCode, ManagedJobID: item.Labels[LabelJobID],
-			PID: info.State.Pid, RuntimeHeartbeatAt: time.Now().UTC(), DockerHealth: dockerHealth(info.State),
-			HeartbeatMounted: heartbeatMounted(info.Mounts),
-		}
+		claims = append(claims, claim)
+	}
+	return claims, nil
+}
+
+func (d *Docker) claimFrom(ctx context.Context, item container.Summary) (domain.ContainerClaim, error) {
+	inspect, err := d.client.ContainerInspect(ctx, item.ID, client.ContainerInspectOptions{})
+	if err != nil {
+		return domain.ContainerClaim{}, err
+	}
+	info := inspect.Container
+	labels := item.Labels
+	if info.Config != nil && len(info.Config.Labels) > 0 {
+		labels = info.Config.Labels
+	}
+	claim := domain.ContainerClaim{
+		ContainerID: item.ID, Name: strings.TrimPrefix(firstName(item.Names), "/"), Image: item.Image,
+		State: string(item.State), ManagedJobID: labels[LabelJobID],
+		RuntimeHeartbeatAt: time.Now().UTC(), DockerHealth: "none", CPUUnbounded: true,
+	}
+	if info.State != nil {
+		claim.ExitCode = info.State.ExitCode
+		claim.PID = info.State.Pid
+		claim.DockerHealth = dockerHealth(info.State)
+	}
+	claim.HeartbeatMounted = heartbeatMounted(info.Mounts)
+	if info.HostConfig != nil {
 		if info.HostConfig.CpusetCpus == "" {
 			claim.CPUUnbounded = true
-		} else {
-			claim.CPUIds, err = inventory.ParseCPUList(info.HostConfig.CpusetCpus)
-			if err != nil {
-				return nil, err
-			}
+		} else if cpuIds, err := inventory.ParseCPUList(info.HostConfig.CpusetCpus); err == nil {
+			claim.CPUIds = cpuIds
+			claim.CPUUnbounded = false
 		}
 		for _, request := range info.HostConfig.DeviceRequests {
 			gpuCapability := false
@@ -241,9 +253,8 @@ func (d *Docker) DiscoverContainerClaims(ctx context.Context) ([]domain.Containe
 				claim.GPUUnbounded = true
 			}
 		}
-		claims = append(claims, claim)
 	}
-	return claims, nil
+	return claim, nil
 }
 
 func heartbeatMounted(mounts []container.MountPoint) bool {

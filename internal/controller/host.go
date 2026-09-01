@@ -19,11 +19,7 @@ func (s *Server) getUnmanaged(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.syncHostContainers(r.Context(), claims)
-	records, err := s.store.ListDiscoveredContainers(r.Context())
-	if err != nil {
-		writeProblem(w, 500, "Host inventory unavailable", err.Error())
-		return
-	}
+	records, _ := s.store.ListDiscoveredContainers(r.Context())
 	byID := make(map[string]domain.DiscoveredContainer, len(records))
 	for _, item := range records {
 		byID[item.ContainerID] = item
@@ -46,12 +42,8 @@ func (s *Server) getUnmanaged(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		item := hostContainerFrom(claim, record, jobs[claim.ManagedJobID], now)
-		if claimLive(claim.State) {
-			if metric, err := s.agent.ContainerMetrics(r.Context(), claim.ContainerID); err == nil {
-				item.MemoryUsedBytes = metric.MemoryUsedBytes
-				item.MemoryLimitBytes = metric.MemoryLimitBytes
-			}
-		}
+		item.MemoryUsedBytes = claim.MemoryUsedBytes
+		item.MemoryLimitBytes = claim.MemoryLimitBytes
 		for _, uuid := range item.TrainingGPUUUIDs {
 			if gpu, ok := gpuByUUID[uuid]; ok {
 				item.GPUs = append(item.GPUs, gpu)

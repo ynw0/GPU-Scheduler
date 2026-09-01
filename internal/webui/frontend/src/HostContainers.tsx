@@ -62,6 +62,7 @@ export function HostContainersPage({ role }: { role: User['role'] }) {
   const rows = items.data ?? []
   const internal = rows.filter((item) => item.managedJobId)
   const external = rows.filter((item) => !item.managedJobId)
+  const loadError = items.error instanceof Error ? items.error.message : items.isError ? '无法读取容器' : ''
 
   return (
     <section className="workload-page overview-enter">
@@ -69,6 +70,7 @@ export function HostContainersPage({ role }: { role: User['role'] }) {
         <div><p className="eyebrow">CONTAINERS</p><h2>容器列表</h2></div>
         <span className="module-count">{rows.length} 项</span>
       </div>
+      {loadError && <div className="empty-row compact"><Box size={22} /><span>{loadError}</span></div>}
       <div className="host-group">
         <div className="host-group-heading">
           <h3>内部容器</h3>
@@ -88,7 +90,7 @@ export function HostContainersPage({ role }: { role: User['role'] }) {
               <span>{item.state}</span>
             </div>
           ))}
-          {!internal.length && <div className="empty-row compact"><Box size={22} /><span>没有内部容器</span></div>}
+          {!loadError && !internal.length && <div className="empty-row compact"><Box size={22} /><span>没有内部容器</span></div>}
         </div>
       </div>
       <div className="host-group">
@@ -126,7 +128,7 @@ export function HostContainersPage({ role }: { role: User['role'] }) {
               </span>
             </div>
           ))}
-          {!external.length && <div className="empty-row compact"><Box size={22} /><span>没有外部容器</span></div>}
+          {!loadError && !external.length && <div className="empty-row compact"><Box size={22} /><span>没有外部容器</span></div>}
         </div>
       </div>
     </section>
