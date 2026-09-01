@@ -285,6 +285,7 @@ type ContainerClaim struct {
 	CPUActivity        bool      `json:"cpuActivity"`
 	GPUActivity        bool      `json:"gpuActivity"`
 	OOMUnder           bool      `json:"oomUnder"`
+	HeartbeatMounted   bool      `json:"heartbeatMounted,omitempty"`
 }
 
 type DiscoveredContainer struct {

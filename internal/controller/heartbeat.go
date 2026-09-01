@@ -34,7 +34,6 @@ func (s *Server) reconcileHeartbeats(ctx context.Context, claims []domain.Contai
 		if err != nil {
 			continue
 		}
-		_ = s.agent.EnsureHeartbeat(ctx, attempt.ID)
 		jobClaims := byJob[job.ID]
 		runtime := runtimeForJob(job.ID, jobClaims)
 		if dockerUnhealthy(jobClaims) && job.State == domain.JobRunning {
@@ -44,11 +43,15 @@ func (s *Server) reconcileHeartbeats(ctx context.Context, claims []domain.Contai
 				job.State = domain.JobDegraded
 			}
 		}
-		if !jobNeedsTrainingHeartbeat(job) {
+		mounted := jobHasHeartbeatMount(jobClaims)
+		if mounted {
+			_ = s.agent.EnsureHeartbeat(ctx, attempt.ID)
+		}
+		status, hbErr := s.store.GetHeartbeatForAttempt(ctx, attempt.ID)
+		if !jobNeedsTrainingHeartbeat(job) || (!mounted && hbErr != nil) {
 			s.recoverIfHealthy(ctx, job, runtime, true)
 			continue
 		}
-		status, hbErr := s.store.GetHeartbeatForAttempt(ctx, attempt.ID)
 		now := time.Now().UTC()
 		inGrace := now.Sub(attempt.CreatedAt) < heartbeatStartGrace
 		fresh := hbErr == nil && now.Sub(status.ReportedAt) <= heartbeatExpire
@@ -132,6 +135,15 @@ func jobNeedsTrainingHeartbeat(job domain.Job) bool {
 	}
 	for _, service := range job.Spec.Workload.Services {
 		if strings.EqualFold(service.Class, "training") {
+			return true
+		}
+	}
+	return false
+}
+
+func jobHasHeartbeatMount(claims []domain.ContainerClaim) bool {
+	for _, claim := range claims {
+		if claim.HeartbeatMounted {
 			return true
 		}
 	}

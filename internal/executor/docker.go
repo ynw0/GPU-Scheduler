@@ -214,6 +214,7 @@ func (d *Docker) DiscoverContainerClaims(ctx context.Context) ([]domain.Containe
 			ContainerID: item.ID, Name: strings.TrimPrefix(firstName(item.Names), "/"), Image: item.Image,
 			State: string(item.State), ExitCode: info.State.ExitCode, ManagedJobID: item.Labels[LabelJobID],
 			PID: info.State.Pid, RuntimeHeartbeatAt: time.Now().UTC(), DockerHealth: dockerHealth(info.State),
+			HeartbeatMounted: heartbeatMounted(info.Mounts),
 		}
 		if info.HostConfig.CpusetCpus == "" {
 			claim.CPUUnbounded = true
@@ -243,6 +244,15 @@ func (d *Docker) DiscoverContainerClaims(ctx context.Context) ([]domain.Containe
 		claims = append(claims, claim)
 	}
 	return claims, nil
+}
+
+func heartbeatMounted(mounts []container.MountPoint) bool {
+	for _, item := range mounts {
+		if item.Destination == heartbeat.ContainerDir {
+			return true
+		}
+	}
+	return false
 }
 
 func dockerHealth(state *container.State) string {
