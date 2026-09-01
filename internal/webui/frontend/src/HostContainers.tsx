@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Box } from 'lucide-react'
 import { api } from './api'
-import type { HostContainer, User } from './types'
+import type { GPU, HostContainer, User } from './types'
 
 function formatBytes(value = 0): string {
   if (!value) return '0 GB'
@@ -14,29 +14,95 @@ function formatSilent(seconds: number): string {
   return `${(seconds / 3600).toFixed(1)}h`
 }
 
-function cpuLabel(item: HostContainer): string {
+function formatThreadIds(ids: number[]): string {
+  if (!ids.length) return '未绑定具体线程'
+  const sorted = [...ids].sort((a, b) => a - b)
+  const parts: string[] = []
+  let start = sorted[0]
+  let prev = sorted[0]
+  for (let i = 1; i <= sorted.length; i++) {
+    const current = sorted[i]
+    if (current === prev + 1) {
+      prev = current
+      continue
+    }
+    parts.push(start === prev ? String(start) : `${start}–${prev}`)
+    start = prev = current
+  }
+  return `线程 ${parts.join(', ')}`
+}
+
+function gpuName(uuid: string, gpus: GPU[]): string {
+  const gpu = gpus.find((item) => item.uuid === uuid)
+  return gpu ? `GPU ${gpu.index}` : uuid.slice(0, 8)
+}
+
+function cpuSetting(item: HostContainer): { label: string; detail: string } {
   const ids = item.cpuIds ?? []
-  if (item.cpuUnbounded) return '未限制'
-  if (!ids.length) return '—'
-  return `${ids.length} 线程`
+  if (item.cpuUnbounded) return { label: '未限制', detail: '未绑定 cpuset，可使用宿主机全部线程' }
+  if (!ids.length) return { label: '—', detail: '未绑定具体线程' }
+  return { label: `${ids.length} 线程`, detail: formatThreadIds(ids) }
 }
 
-function gpuLabel(item: HostContainer): string {
+function gpuSetting(item: HostContainer, gpus: GPU[]): { label: string; detail: string } {
   const uuids = item.gpuUuids ?? []
-  if (item.gpuUnbounded) return '全部 GPU'
-  if (!uuids.length) return '无 GPU'
-  return `${uuids.length} 张卡`
+  if (item.gpuUnbounded) {
+    const lines = gpus.length ? gpus.map((gpu) => `GPU ${gpu.index}  ${gpu.name}`) : ['绑定宿主机全部 GPU']
+    return { label: '全部 GPU', detail: lines.join('\n') }
+  }
+  if (!uuids.length) return { label: '无 GPU', detail: '未绑定 GPU' }
+  return {
+    label: `${uuids.length} 张卡`,
+    detail: uuids.map((uuid) => {
+      const gpu = gpus.find((item) => item.uuid === uuid)
+      return gpu ? `GPU ${gpu.index}  ${gpu.name}\n${uuid}` : uuid
+    }).join('\n\n'),
+  }
 }
 
-function occupancyLabel(item: HostContainer): string {
-  const parts = [item.training ? '训练中' : '空闲']
-  if (item.dockerHealth && item.dockerHealth !== 'none') parts.push(item.dockerHealth)
-  if (item.cpuActivity) parts.push('CPU')
-  if (item.gpuActivity) parts.push('GPU')
-  if (item.oomUnder) parts.push('OOM')
-  if (item.memoryUsedBytes) parts.push(formatBytes(item.memoryUsedBytes))
-  if (item.gpus?.length) parts.push(`GPU ${item.gpus.map((gpu) => `${gpu.utilizationPercent}%`).join('/')}`)
-  return parts.join(' · ')
+function Tip({ label, detail }: { label: string; detail: string }) {
+  return (
+    <span className="host-tip">
+      {label}
+      <span className="host-tip-box">{detail}</span>
+    </span>
+  )
+}
+
+function Occupancy({ item, gpus }: { item: HostContainer; gpus: GPU[] }) {
+  const live = item.state === 'running' || item.state === 'paused'
+  const ids = item.cpuIds ?? []
+  const memory = item.memoryLimitBytes
+    ? `${formatBytes(item.memoryUsedBytes)} / ${formatBytes(item.memoryLimitBytes)}`
+    : item.memoryUsedBytes ? formatBytes(item.memoryUsedBytes) : '—'
+  const pct = `${(item.cpuPercent ?? 0).toFixed(0)}%`
+  const cpu = item.cpuUnbounded
+    ? (live ? `未限制 · ${pct}` : '未限制')
+    : `${ids.length} 线程${live ? ` · ${pct}` : ''}`
+  const used = item.gpus ?? []
+
+  return (
+    <div className="host-use">
+      <div><span>内存</span><strong>{live ? memory : '—'}</strong></div>
+      <div><span>CPU</span><strong>{live ? cpu : '—'}</strong></div>
+      <div>
+        <span>GPU</span>
+        <div>
+          {!used.length && <strong>未占用</strong>}
+          {used.map((gpu) => (
+            <strong key={gpu.uuid}>
+              {gpuName(gpu.uuid, gpus)}
+              {'  '}
+              {formatBytes(gpu.memoryUsedBytes)}/{formatBytes(gpu.memoryTotalBytes)}
+              {' · '}
+              {gpu.utilizationPercent}%
+            </strong>
+          ))}
+        </div>
+      </div>
+      {item.oomUnder && <div className="host-use-warn">OOM</div>}
+    </div>
+  )
 }
 
 function ContainerName({ item }: { item: HostContainer }) {
@@ -49,7 +115,7 @@ function ContainerName({ item }: { item: HostContainer }) {
   )
 }
 
-export function HostContainersPage({ role }: { role: User['role'] }) {
+export function HostContainersPage({ role, gpus = [] }: { role: User['role']; gpus?: GPU[] }) {
   const queryClient = useQueryClient()
   const items = useQuery({ queryKey: ['host-containers'], queryFn: api.hostContainers, refetchInterval: 10_000 })
   const patch = useMutation({
@@ -82,16 +148,20 @@ export function HostContainersPage({ role }: { role: User['role'] }) {
           <div className="host-row internal header">
             <span>容器</span><span>CPU 设置</span><span>GPU 设置</span><span>当前占用</span><span>任务</span><span>状态</span>
           </div>
-          {internal.map((item) => (
-            <div className="host-row internal" key={item.containerId}>
-              <ContainerName item={item} />
-              <span>{cpuLabel(item)}</span>
-              <span>{gpuLabel(item)}</span>
-              <span>{occupancyLabel(item)}</span>
-              <span>{item.jobName || item.managedJobId?.slice(0, 8)}</span>
-              <span>{item.state}</span>
-            </div>
-          ))}
+          {internal.map((item) => {
+            const cpu = cpuSetting(item)
+            const gpu = gpuSetting(item, gpus)
+            return (
+              <div className="host-row internal" key={item.containerId}>
+                <ContainerName item={item} />
+                <Tip label={cpu.label} detail={cpu.detail} />
+                <Tip label={gpu.label} detail={gpu.detail} />
+                <Occupancy item={item} gpus={gpus} />
+                <span>{item.jobName || item.managedJobId?.slice(0, 8)}</span>
+                <span>{item.state}</span>
+              </div>
+            )
+          })}
           {!loadError && !internal.length && <div className="empty-row compact"><Box size={22} /><span>没有内部容器</span></div>}
         </div>
       </div>
@@ -104,32 +174,36 @@ export function HostContainersPage({ role }: { role: User['role'] }) {
           <div className="host-row header">
             <span>容器</span><span>CPU 设置</span><span>GPU 设置</span><span>当前占用</span><span>优先级</span><span>静默</span><span>操作</span>
           </div>
-          {external.map((item) => (
-            <div className="host-row" key={item.containerId}>
-              <ContainerName item={item} />
-              <span>{cpuLabel(item)}</span>
-              <span>{gpuLabel(item)}</span>
-              <span>{occupancyLabel(item)}</span>
-              <span>
-                {admin ? (
-                  <select
-                    className="host-priority"
-                    value={item.priority}
-                    onChange={(event) => patch.mutate({ id: item.containerId, priority: event.target.value as HostContainer['priority'] })}
-                  >
-                    <option>P0</option><option>P1</option><option>P2</option><option>P3</option>
-                  </select>
-                ) : item.priority}
-                {item.priorityLocked ? ' 锁' : ''}
-              </span>
-              <span className="muted">{formatSilent(item.silentSeconds)}</span>
-              <span>
-                {admin && (item.state === 'running' || item.state === 'paused') && (
-                  <button className="text-button" onClick={() => stop.mutate(item.containerId)}>停止</button>
-                )}
-              </span>
-            </div>
-          ))}
+          {external.map((item) => {
+            const cpu = cpuSetting(item)
+            const gpu = gpuSetting(item, gpus)
+            return (
+              <div className="host-row" key={item.containerId}>
+                <ContainerName item={item} />
+                <Tip label={cpu.label} detail={cpu.detail} />
+                <Tip label={gpu.label} detail={gpu.detail} />
+                <Occupancy item={item} gpus={gpus} />
+                <span>
+                  {admin ? (
+                    <select
+                      className="host-priority"
+                      value={item.priority}
+                      onChange={(event) => patch.mutate({ id: item.containerId, priority: event.target.value as HostContainer['priority'] })}
+                    >
+                      <option>P0</option><option>P1</option><option>P2</option><option>P3</option>
+                    </select>
+                  ) : item.priority}
+                  {item.priorityLocked ? ' 锁' : ''}
+                </span>
+                <span className="muted">{formatSilent(item.silentSeconds)}</span>
+                <span>
+                  {admin && (item.state === 'running' || item.state === 'paused') && (
+                    <button className="text-button" onClick={() => stop.mutate(item.containerId)}>停止</button>
+                  )}
+                </span>
+              </div>
+            )
+          })}
           {!loadError && !external.length && <div className="empty-row compact"><Box size={22} /><span>没有外部容器</span></div>}
         </div>
       </div>

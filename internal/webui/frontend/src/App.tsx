@@ -186,6 +186,7 @@ export function App() {
             jobs={jobs.data ?? []}
             role={me.data.role}
             templates={templates.data ?? []}
+            gpus={topology.data?.gpus ?? []}
             onOpenJob={setSelectedJobId}
             onAction={(id, name) => action.mutate({ id, name })}
           />
@@ -405,17 +406,18 @@ function EmptyTopology() {
 }
 
 function SectionContent({
-  section, jobs, role, templates, onOpenJob, onAction,
+  section, jobs, role, templates, gpus, onOpenJob, onAction,
 }: {
   section: Section
   jobs: Job[]
   role: import('./types').User['role']
   templates: import('./types').Template[]
+  gpus: GPU[]
   onOpenJob: (id: string) => void
   onAction: (id: string, name: 'start' | 'stop' | 'cancel' | 'retry') => void
 }) {
   if (section === 'admin') return <AdminPage role={role} />
-  if (section === 'host') return <HostContainersPage role={role} />
+  if (section === 'host') return <HostContainersPage role={role} gpus={gpus} />
   if (section === 'templates') {
     return (
       <section className="workload-page overview-enter">

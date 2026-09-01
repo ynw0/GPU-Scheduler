@@ -288,6 +288,7 @@ type ContainerClaim struct {
 	HeartbeatMounted   bool      `json:"heartbeatMounted,omitempty"`
 	MemoryUsedBytes    uint64    `json:"memoryUsedBytes,omitempty"`
 	MemoryLimitBytes   uint64    `json:"memoryLimitBytes,omitempty"`
+	CPUPercent         float64   `json:"cpuPercent"`
 }
 
 type DiscoveredContainer struct {
@@ -324,6 +325,7 @@ type HostContainer struct {
 	DockerHealth     string      `json:"dockerHealth"`
 	CPUActivity      bool        `json:"cpuActivity"`
 	GPUActivity      bool        `json:"gpuActivity"`
+	CPUPercent       float64     `json:"cpuPercent"`
 	OOMUnder         bool        `json:"oomUnder"`
 	ManagedJobID     string      `json:"managedJobId,omitempty"`
 	JobName          string      `json:"jobName,omitempty"`

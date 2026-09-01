@@ -168,11 +168,15 @@ func (s *Server) enrichRuntime(containerID string, claim *domain.ContainerClaim)
 	claim.OOMUnder = sample.OOMUnder
 	claim.MemoryUsedBytes = sample.MemoryUsedBytes
 	claim.MemoryLimitBytes = sample.MemoryLimitBytes
+	var sum float64
 	for _, percent := range sample.CPUPercentByID {
+		sum += percent
 		if percent >= 0.5 {
 			claim.CPUActivity = true
-			return
 		}
+	}
+	if n := len(sample.CPUPercentByID); n > 0 {
+		claim.CPUPercent = sum / float64(n)
 	}
 }
 

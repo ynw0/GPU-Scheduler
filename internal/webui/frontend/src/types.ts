@@ -241,6 +241,7 @@ export interface HostContainer {
   dockerHealth?: string
   cpuActivity?: boolean
   gpuActivity?: boolean
+  cpuPercent?: number
   oomUnder?: boolean
   managedJobId?: string
   jobName?: string
