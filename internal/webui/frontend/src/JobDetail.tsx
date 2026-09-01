@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from './api'
-import type { Job } from './types'
+import type { Job, JobSpec, ResourceRequest } from './types'
 
 function statusLabel(status: string): string {
   const labels: Record<string, string> = {
@@ -19,14 +19,33 @@ function formatBytes(value = 0): string {
   return `${(value / 1024).toFixed(1)} KB`
 }
 
+function specResources(spec: JobSpec): ResourceRequest {
+  if (spec.workload.kind === 'compose') {
+    return spec.workload.services.find((item) => item.class === 'training')?.resources ?? spec.resources
+  }
+  return spec.resources
+}
+
+function gpuLabel(resources: ResourceRequest): string {
+  if (resources.gpuMode === 'manual') return `${(resources.gpuUuids ?? []).length} 张整卡`
+  return `${resources.gpuCount} 张（自动）`
+}
+
+function cpuLabel(resources: ResourceRequest): string {
+  if (resources.cpuMode === 'manual-threads') return `${(resources.cpuIds ?? []).length} 线程`
+  return `${resources.cpuCount} 物理核`
+}
+
 export function JobDetail({
   job,
   onClose,
   onAction,
+  onClone,
 }: {
   job: Job
   onClose: () => void
   onAction: (name: 'start' | 'stop' | 'cancel' | 'retry') => void
+  onClone: (spec: JobSpec) => void
 }) {
   const [logText, setLogText] = useState('')
   const [logError, setLogError] = useState('')
@@ -86,6 +105,7 @@ export function JobDetail({
             {(job.allocations ?? []).map((item) => (
               <div className="plan-line" key={item.id}><span>{item.resourceType}</span><strong>{item.resourceId}</strong></div>
             ))}
+            {job.spec && <JobSpecView spec={job.spec} />}
             <div className="job-metric-grid">
               <div className="plan-line"><span>CPU</span><strong>{cpuValues.length ? `${cpuAvg.toFixed(1)}%` : '—'}</strong></div>
               <div className="plan-line"><span>内存</span><strong>{latest ? `${formatBytes(latest.memoryUsedBytes)} / ${formatBytes(latest.memoryLimitBytes)}` : '—'}</strong></div>
@@ -101,6 +121,7 @@ export function JobDetail({
               ))}
             </div>
             <div className="dialog-actions">
+              {job.spec && <button className="secondary-action" onClick={() => onClone(job.spec!)}>再开一次</button>}
               {job.state === 'QUEUED' && <button className="secondary-action" onClick={() => onAction('start')}>立即调度</button>}
               {(job.state === 'RUNNING' || job.state === 'DEGRADED' || job.state === 'DRIFTED') && <button className="secondary-action" onClick={() => onAction('stop')}>停止</button>}
               {['QUEUED', 'RESERVED', 'RUNNING', 'CREATING', 'STARTING', 'DEGRADED', 'DRIFTED'].includes(job.state) && <button className="secondary-action" onClick={() => onAction('cancel')}>取消</button>}
@@ -114,6 +135,54 @@ export function JobDetail({
           </aside>
         </div>
       </section>
+    </div>
+  )
+}
+
+function JobSpecView({ spec }: { spec: JobSpec }) {
+  const resources = specResources(spec)
+  const workload = spec.workload
+  return (
+    <div className="job-spec">
+      <p className="eyebrow">LAUNCH SPEC</p>
+      <div className="plan-line"><span>类型</span><strong>{workload.kind === 'image' ? 'Image' : 'Compose'}</strong></div>
+      {spec.resourcePoolId && <div className="plan-line"><span>资源池</span><strong>{spec.resourcePoolId.slice(0, 8)}</strong></div>}
+      {workload.kind === 'image' && (
+        <>
+          <div className="plan-line"><span>镜像</span><strong>{workload.image}</strong></div>
+          {workload.command?.length ? <div className="plan-line"><span>命令</span><strong>{workload.command.join(' ')}</strong></div> : null}
+          {workload.entrypoint?.length ? <div className="plan-line"><span>入口</span><strong>{workload.entrypoint.join(' ')}</strong></div> : null}
+          {workload.workingDirectory ? <div className="plan-line"><span>工作目录</span><strong>{workload.workingDirectory}</strong></div> : null}
+          {(workload.mounts ?? []).map((item, index) => (
+            <div className="plan-line" key={`${item.source}-${index}`}>
+              <span>挂载{item.readOnly ? '（只读）' : ''}</span>
+              <strong>{item.source} → {item.target}</strong>
+            </div>
+          ))}
+          {Object.entries(workload.environment ?? {}).map(([key, value]) => (
+            <div className="plan-line" key={key}><span>环境</span><strong>{key}={value}</strong></div>
+          ))}
+          {(workload.publishedPorts ?? []).map((item, index) => (
+            <div className="plan-line" key={`${item.hostPort}-${index}`}>
+              <span>端口</span>
+              <strong>{item.hostPort}→{item.containerPort}/{item.protocol || 'tcp'}</strong>
+            </div>
+          ))}
+          {workload.shmSizeBytes ? <div className="plan-line"><span>共享内存</span><strong>{formatBytes(workload.shmSizeBytes)}</strong></div> : null}
+          {workload.user ? <div className="plan-line"><span>用户</span><strong>{workload.user}</strong></div> : null}
+        </>
+      )}
+      {workload.kind === 'compose' && (
+        <>
+          <div className="plan-line"><span>Compose 来源</span><strong>{workload.composeSourceId}</strong></div>
+          {workload.services.map((item) => (
+            <div className="plan-line" key={item.name}><span>服务</span><strong>{item.name} · {item.class}</strong></div>
+          ))}
+        </>
+      )}
+      <div className="plan-line"><span>GPU</span><strong>{gpuLabel(resources)}</strong></div>
+      <div className="plan-line"><span>CPU</span><strong>{cpuLabel(resources)}</strong></div>
+      <div className="plan-line"><span>内存</span><strong>{formatBytes(resources.memoryBytes)}</strong></div>
     </div>
   )
 }

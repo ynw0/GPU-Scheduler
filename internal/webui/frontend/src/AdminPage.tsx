@@ -14,11 +14,12 @@ export function AdminPage({ role }: { role: User['role'] }) {
   const pools = useQuery({ queryKey: ['resource-pools'], queryFn: api.resourcePools, enabled: role === 'Admin' })
   const topology = useQuery({ queryKey: ['topology'], queryFn: api.topology, enabled: role === 'Admin' && tab === 'pools' })
   const audit = useQuery({ queryKey: ['audit'], queryFn: api.auditEvents, enabled: role === 'Admin' || role === 'Auditor' })
+  const me = useQuery({ queryKey: ['me'], queryFn: api.me })
   const [userForm, setUserForm] = useState({ username: '', password: '', role: 'User' as User['role'], teamId: '' })
   const [userCreated, setUserCreated] = useState('')
   const [teamName, setTeamName] = useState('')
   const [sourceForm, setSourceForm] = useState({ name: '', rootPath: '', entryFile: 'compose.yaml' })
-  const [quotaForm, setQuotaForm] = useState({ scopeType: 'user' as 'user' | 'team', scopeId: '', gpuLimit: 4, cpuThreadLimit: 32, memoryBytesLimit: 256 * 1024 ** 3 })
+  const [quotaForm, setQuotaForm] = useState({ scopeType: 'user' as 'user' | 'team', scopeId: '', gpuLimit: 4, cpuThreadLimit: 32, memoryGB: 256 })
   const [poolName, setPoolName] = useState('')
   const [poolShared, setPoolShared] = useState(false)
   const [poolGPUs, setPoolGPUs] = useState<string[]>([])
@@ -39,6 +40,11 @@ export function AdminPage({ role }: { role: User['role'] }) {
     },
     onMutate: () => setUserCreated(''),
   })
+  const updateUser = useMutation({
+    mutationFn: (value: { id: string; role: User['role']; teamId: string; disabled: boolean }) =>
+      api.updateUser(value.id, { role: value.role, teamId: value.teamId, disabled: value.disabled }),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['users'] }) },
+  })
   const createTeam = useMutation({
     mutationFn: () => api.createTeam(teamName),
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['teams'] }); setTeamName('') },
@@ -48,7 +54,14 @@ export function AdminPage({ role }: { role: User['role'] }) {
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['compose-sources'] }); setSourceForm({ name: '', rootPath: '', entryFile: 'compose.yaml' }) },
   })
   const saveQuota = useMutation({
-    mutationFn: () => api.upsertQuota({ id: '', ...quotaForm }),
+    mutationFn: () => api.upsertQuota({
+      id: '',
+      scopeType: quotaForm.scopeType,
+      scopeId: quotaForm.scopeId,
+      gpuLimit: quotaForm.gpuLimit,
+      cpuThreadLimit: quotaForm.cpuThreadLimit,
+      memoryBytesLimit: quotaForm.memoryGB * 1024 ** 3,
+    }),
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['quotas'] }) },
   })
   const createPool = useMutation({
@@ -118,14 +131,35 @@ export function AdminPage({ role }: { role: User['role'] }) {
             </button>
             {userCreated && <div className="plan-status ok">{userCreated}</div>}
             {createUser.error && <div className="plan-conflict">{String(createUser.error.message)}</div>}
+            {updateUser.error && <div className="plan-conflict">{String(updateUser.error.message)}</div>}
           </form>
           <div className="full-job-table">
+            <div className="full-job-row header"><span>用户</span><span>角色</span><span>团队</span><span>操作</span></div>
             {(users.data ?? []).map((user) => (
               <div className="full-job-row" key={user.id}>
-                <span>{user.username}</span>
-                <span>{user.role}</span>
-                <span className="muted">{(teams.data ?? []).find((team) => team.id === user.teamId)?.name || user.teamId || '—'}</span>
-                <span className="muted">{user.disabled ? '已停用' : '启用'}</span>
+                <span>{user.username}{user.disabled ? ' · 已停用' : ''}</span>
+                <select
+                  className="host-priority"
+                  value={user.role}
+                  onChange={(event) => updateUser.mutate({ id: user.id, role: event.target.value as User['role'], teamId: user.teamId ?? '', disabled: Boolean(user.disabled) })}
+                >
+                  <option>User</option><option>TeamOperator</option><option>Admin</option><option>Viewer</option><option>Auditor</option>
+                </select>
+                <select
+                  className="host-priority"
+                  value={user.teamId || ''}
+                  onChange={(event) => updateUser.mutate({ id: user.id, role: user.role, teamId: event.target.value, disabled: Boolean(user.disabled) })}
+                >
+                  <option value="">无团队</option>
+                  {(teams.data ?? []).map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+                </select>
+                <button
+                  className="text-button"
+                  disabled={me.data?.id === user.id}
+                  onClick={() => updateUser.mutate({ id: user.id, role: user.role, teamId: user.teamId ?? '', disabled: !user.disabled })}
+                >
+                  {user.disabled ? '启用' : '停用'}
+                </button>
               </div>
             ))}
           </div>
@@ -143,13 +177,39 @@ export function AdminPage({ role }: { role: User['role'] }) {
       {tab === 'quotas' && role === 'Admin' && (
         <div className="admin-grid">
           <form className="admin-form" onSubmit={(event) => { event.preventDefault(); saveQuota.mutate() }}>
-            <label>范围<select value={quotaForm.scopeType} onChange={(event) => setQuotaForm({ ...quotaForm, scopeType: event.target.value as 'user' | 'team' })}><option value="user">用户</option><option value="team">团队</option></select></label>
-            <label>对象 ID<input value={quotaForm.scopeId} onChange={(event) => setQuotaForm({ ...quotaForm, scopeId: event.target.value })} /></label>
-            <label>GPU 上限<input type="number" value={quotaForm.gpuLimit} onChange={(event) => setQuotaForm({ ...quotaForm, gpuLimit: Number(event.target.value) })} /></label>
-            <label>CPU 线程上限<input type="number" value={quotaForm.cpuThreadLimit} onChange={(event) => setQuotaForm({ ...quotaForm, cpuThreadLimit: Number(event.target.value) })} /></label>
-            <button className="primary-action" type="submit">保存配额</button>
+            <label>范围<select value={quotaForm.scopeType} onChange={(event) => setQuotaForm({ ...quotaForm, scopeType: event.target.value as 'user' | 'team', scopeId: '' })}><option value="user">用户</option><option value="team">团队</option></select></label>
+            <label>{quotaForm.scopeType === 'user' ? '用户' : '团队'}<select value={quotaForm.scopeId} onChange={(event) => setQuotaForm({ ...quotaForm, scopeId: event.target.value })}>
+              <option value="">选择{quotaForm.scopeType === 'user' ? '用户' : '团队'}</option>
+              {quotaForm.scopeType === 'user'
+                ? (users.data ?? []).map((user) => <option key={user.id} value={user.id}>{user.username}</option>)
+                : (teams.data ?? []).map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+            </select></label>
+            <label>GPU 上限<input type="number" min={0} value={quotaForm.gpuLimit} onChange={(event) => setQuotaForm({ ...quotaForm, gpuLimit: Number(event.target.value) })} /></label>
+            <label>CPU 线程上限<input type="number" min={0} value={quotaForm.cpuThreadLimit} onChange={(event) => setQuotaForm({ ...quotaForm, cpuThreadLimit: Number(event.target.value) })} /></label>
+            <label>内存上限（GB）<input type="number" min={1} value={quotaForm.memoryGB} onChange={(event) => setQuotaForm({ ...quotaForm, memoryGB: Number(event.target.value) })} /></label>
+            <button className="primary-action" type="submit" disabled={!quotaForm.scopeId || saveQuota.isPending}>{saveQuota.isPending ? '正在保存…' : '保存配额'}</button>
+            {saveQuota.error && <div className="plan-conflict">{String(saveQuota.error.message)}</div>}
           </form>
-          <div className="full-job-table">{(quotas.data ?? []).map((item) => <div className="full-job-row" key={item.id}><span>{item.scopeType}</span><span>{item.scopeId.slice(0, 8)}</span><span>{item.gpuLimit} GPU</span><span>{item.cpuThreadLimit} CPU</span></div>)}</div>
+          <div className="full-job-table">
+            <div className="full-job-row header"><span>对象</span><span>范围</span><span>GPU</span><span>CPU</span><span>内存</span></div>
+            {(quotas.data ?? []).map((item) => {
+              const label = item.scopeType === 'user'
+                ? (users.data ?? []).find((user) => user.id === item.scopeId)?.username
+                : (teams.data ?? []).find((team) => team.id === item.scopeId)?.name
+              return (
+                <div className="full-job-row" key={item.id} style={{ cursor: 'pointer' }} onClick={() => setQuotaForm({
+                  scopeType: item.scopeType, scopeId: item.scopeId, gpuLimit: item.gpuLimit, cpuThreadLimit: item.cpuThreadLimit,
+                  memoryGB: Math.max(1, Math.round(item.memoryBytesLimit / 1024 ** 3)),
+                })}>
+                  <span>{label || item.scopeId.slice(0, 8)}</span>
+                  <span>{item.scopeType === 'user' ? '用户' : '团队'}</span>
+                  <span>{item.gpuLimit} GPU</span>
+                  <span>{item.cpuThreadLimit} CPU</span>
+                  <span>{(item.memoryBytesLimit / 1024 ** 3).toFixed(0)} GB</span>
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
       {tab === 'compose' && role === 'Admin' && (

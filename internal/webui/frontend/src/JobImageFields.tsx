@@ -1,4 +1,4 @@
-import type { ImageInfo, Mount, PortPublish } from './types'
+import type { ImageInfo, ImageWorkload, Mount, PortPublish } from './types'
 
 function formatBytes(value = 0): string {
   if (!value) return '0 GB'
@@ -36,12 +36,27 @@ export function parseEnvironment(value: string): Record<string, string> {
   return result
 }
 
+export function imageFieldsFromWorkload(workload: ImageWorkload): ImageFields {
+  return {
+    image: workload.image,
+    command: (workload.command ?? []).join('\n'),
+    entrypoint: (workload.entrypoint ?? []).join('\n'),
+    workingDirectory: workload.workingDirectory ?? '',
+    environment: Object.entries(workload.environment ?? {}).map(([key, value]) => `${key}=${value}`).join('\n'),
+    mounts: workload.mounts ?? [],
+    ports: workload.publishedPorts ?? [],
+    shmMB: workload.shmSizeBytes ? String(Math.round(workload.shmSizeBytes / 1024 / 1024)) : '',
+    user: workload.user ?? '',
+  }
+}
+
 export function JobImageFields({
-  images, value, memoryGB, onChange, onMemory,
+  images, value, memoryGB, allowedRoots = [], onChange, onMemory,
 }: {
   images: ImageInfo[]
   value: ImageFields
   memoryGB: number
+  allowedRoots?: string[]
   onChange: (next: ImageFields) => void
   onMemory: (gb: number) => void
 }) {
@@ -87,7 +102,7 @@ export function JobImageFields({
           <span>数据盘挂载</span>
           <button type="button" className="text-button" onClick={() => set({ mounts: [...value.mounts, { source: '', target: '', readOnly: false }] })}>添加</button>
         </div>
-        <small>宿主机路径必须在允许根目录下，对应 docker run -v。</small>
+        <small>宿主机路径必须在允许根下{allowedRoots.length ? `：${allowedRoots.join('、')}` : ''}，对应 docker run -v。</small>
         {value.mounts.map((item, index) => (
           <div className="kv-row mount-row" key={index}>
             <input value={item.source} onChange={(event) => setMount(index, { source: event.target.value })} placeholder="宿主机路径 /mnt/disk/exp" />

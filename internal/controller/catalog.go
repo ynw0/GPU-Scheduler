@@ -283,22 +283,33 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) updateUser(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Role     domain.Role
-		TeamID   string
-		Disabled *bool
+		Role     domain.Role `json:"role"`
+		TeamID   string      `json:"teamId"`
+		Disabled *bool       `json:"disabled"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeProblem(w, 422, "Invalid request", err.Error())
 		return
 	}
-	disabled := false
+	id := r.PathValue("id")
+	current, err := s.store.GetUser(r.Context(), id)
+	if err != nil {
+		writeProblem(w, 404, "User not found", "")
+		return
+	}
+	role := body.Role
+	if role == "" {
+		role = current.Role
+	}
+	disabled := current.Disabled
 	if body.Disabled != nil {
 		disabled = *body.Disabled
 	}
-	if err := s.store.UpdateUser(r.Context(), r.PathValue("id"), body.Role, body.TeamID, disabled); err != nil {
+	if err := s.store.UpdateUser(r.Context(), id, role, body.TeamID, disabled); err != nil {
 		writeProblem(w, 500, "Update failed", err.Error())
 		return
 	}
+	_ = s.store.InsertAudit(r.Context(), identityFrom(r.Context()).UserID, "user.update", "user", id, string(role))
 	w.WriteHeader(204)
 }
 

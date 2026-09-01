@@ -65,6 +65,21 @@ paths:
         "204": { description: Password updated }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "422": { $ref: "#/components/responses/ValidationError" }
+  /platform:
+    get:
+      operationId: getPlatform
+      responses:
+        "200":
+          description: Platform settings for authenticated users
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [allowedMountRoots]
+                properties:
+                  allowedMountRoots:
+                    type: array
+                    items: { type: string }
   /topology:
     get:
       operationId: getTopology
@@ -299,6 +314,16 @@ paths:
     patch:
       operationId: updateUser
       parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role: { type: string, enum: [Admin, TeamOperator, User, Viewer, Auditor] }
+                teamId: { type: string }
+                disabled: { type: boolean }
       responses:
         "204": { description: Updated }
   /quotas:

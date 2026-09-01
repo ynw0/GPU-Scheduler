@@ -26,7 +26,7 @@ import { HostContainersPage } from './HostContainers'
 import { JobDetail } from './JobDetail'
 import { NewJobDialog } from './JobDialog'
 import { AccountMenu } from './AccountMenu'
-import type { GPU, Job, LogicalCPU, NUMANode, Topology } from './types'
+import type { GPU, Job, JobSpec, LogicalCPU, NUMANode, Topology } from './types'
 
 type Section = 'overview' | 'jobs' | 'host' | 'queue' | 'templates' | 'admin'
 
@@ -57,6 +57,7 @@ export function App() {
   const queryClient = useQueryClient()
   const [section, setSection] = useState<Section>('overview')
   const [newJobOpen, setNewJobOpen] = useState(false)
+  const [jobDraft, setJobDraft] = useState<JobSpec>()
   const [selectedJobId, setSelectedJobId] = useState<string>()
   const [notifyOpen, setNotifyOpen] = useState(false)
   const me = useQuery({ queryKey: ['me'], queryFn: api.me, retry: false, refetchInterval: false })
@@ -142,7 +143,7 @@ export function App() {
             <button className="icon-button" onClick={() => void topology.refetch()} aria-label="刷新">
               <RefreshCw size={17} />
             </button>
-            <button className="primary-action" onClick={() => setNewJobOpen(true)}><Plus size={17} />新建任务</button>
+            <button className="primary-action" onClick={() => { setJobDraft(undefined); setNewJobOpen(true) }}><Plus size={17} />新建任务</button>
           </div>
         </header>
 
@@ -189,11 +190,18 @@ export function App() {
             templates={templates.data ?? []}
             gpus={topology.data?.gpus ?? []}
             onOpenJob={setSelectedJobId}
+            onUseTemplate={(spec) => { setJobDraft(spec); setNewJobOpen(true) }}
             onAction={(id, name) => action.mutate({ id, name })}
           />
         )}
       </main>
-      {newJobOpen && <NewJobDialog topology={topology.data} onClose={() => setNewJobOpen(false)} />}
+      {newJobOpen && (
+        <NewJobDialog
+          topology={topology.data}
+          initialSpec={jobDraft}
+          onClose={() => { setNewJobOpen(false); setJobDraft(undefined) }}
+        />
+      )}
       {notifyOpen && (
         <aside className="notify-drawer">
           <header><p className="eyebrow">NOTIFICATIONS</p><h3>站内通知</h3></header>
@@ -210,6 +218,11 @@ export function App() {
           job={selectedJob.data}
           onClose={() => setSelectedJobId(undefined)}
           onAction={(name) => action.mutate({ id: selectedJob.data!.id, name })}
+          onClone={(spec) => {
+            setSelectedJobId(undefined)
+            setJobDraft(spec)
+            setNewJobOpen(true)
+          }}
         />
       )}
     </div>
@@ -407,7 +420,7 @@ function EmptyTopology() {
 }
 
 function SectionContent({
-  section, jobs, role, templates, gpus, onOpenJob, onAction,
+  section, jobs, role, templates, gpus, onOpenJob, onUseTemplate, onAction,
 }: {
   section: Section
   jobs: Job[]
@@ -415,6 +428,7 @@ function SectionContent({
   templates: import('./types').Template[]
   gpus: GPU[]
   onOpenJob: (id: string) => void
+  onUseTemplate: (spec: JobSpec) => void
   onAction: (id: string, name: 'start' | 'stop' | 'cancel' | 'retry') => void
 }) {
   if (section === 'admin') return <AdminPage role={role} />
@@ -432,6 +446,9 @@ function SectionContent({
               <span>{item.name}</span>
               <span>{item.spec.workload.kind}</span>
               <span className="muted">{new Date(item.updatedAt).toLocaleString('zh-CN')}</span>
+              <span>
+                <button className="text-button" onClick={() => onUseTemplate(item.spec)}>使用</button>
+              </span>
             </div>
           ))}
           {!templates.length && <div className="empty-row"><Boxes size={22} /><span>还没有模板</span></div>}

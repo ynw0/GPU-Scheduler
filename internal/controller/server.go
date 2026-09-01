@@ -58,6 +58,7 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /api/v1/topology", s.protected(http.HandlerFunc(s.getTopology), false))
 	s.mux.Handle("GET /api/v1/resources/availability", s.protected(http.HandlerFunc(s.getAvailability), false))
 	s.mux.Handle("GET /api/v1/images", s.protected(http.HandlerFunc(s.getImages), false))
+	s.mux.Handle("GET /api/v1/platform", s.protected(http.HandlerFunc(s.getPlatform), false))
 	s.mux.Handle("GET /api/v1/unmanaged-containers", s.protected(http.HandlerFunc(s.getUnmanaged), false))
 	s.mux.Handle("PATCH /api/v1/unmanaged-containers/{id}", s.protected(s.requireAdmin(s.patchHostContainer), true))
 	s.mux.Handle("POST /api/v1/unmanaged-containers/{id}/stop", s.protected(s.requireAdmin(s.stopHostContainer), true))
@@ -195,6 +196,14 @@ func (s *Server) getImages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, images)
+}
+
+func (s *Server) getPlatform(w http.ResponseWriter, r *http.Request) {
+	roots := s.cfg.Agent.AllowedMountRoots
+	if roots == nil {
+		roots = []string{}
+	}
+	writeJSON(w, 200, map[string]any{"allowedMountRoots": roots})
 }
 
 func (s *Server) protected(next http.Handler, csrf bool) http.Handler {

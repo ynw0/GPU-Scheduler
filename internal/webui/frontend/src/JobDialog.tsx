@@ -3,34 +3,51 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, CircleGauge, Cpu, Gauge, HardDrive, LayoutGrid, X } from 'lucide-react'
 import { api } from './api'
 import { cpuSelectable, selectedGPUNuma } from './numa'
-import { emptyImageFields, JobImageFields, parseEnvironment, type ImageFields } from './JobImageFields'
+import { emptyImageFields, imageFieldsFromWorkload, JobImageFields, parseEnvironment, type ImageFields } from './JobImageFields'
 import type { ImageWorkload, JobPlan, JobSpec, ResourceRequest, Topology } from './types'
 
 function emptyResources(): ResourceRequest {
   return { cpuMode: 'auto-cores', cpuCount: 8, gpuMode: 'auto', gpuCount: 1, memoryBytes: 64 * 1024 ** 3, numaPolicy: 'strict' }
 }
 
-export function NewJobDialog({ topology, onClose }: { topology?: Topology; onClose: () => void }) {
+function specResources(spec?: JobSpec): ResourceRequest {
+  if (!spec) return emptyResources()
+  if (spec.workload.kind === 'compose') {
+    return spec.workload.services.find((item) => item.class === 'training')?.resources ?? spec.resources
+  }
+  return spec.resources
+}
+
+export function NewJobDialog({ topology, initialSpec, onClose }: { topology?: Topology; initialSpec?: JobSpec; onClose: () => void }) {
   const queryClient = useQueryClient()
   const images = useQuery({ queryKey: ['images'], queryFn: api.images, refetchInterval: false })
   const sources = useQuery({ queryKey: ['compose-sources'], queryFn: api.composeSources, refetchInterval: false })
-  const [kind, setKind] = useState<'image' | 'compose'>('image')
-  const [name, setName] = useState('')
-  const [imageFields, setImageFields] = useState<ImageFields>(emptyImageFields())
-  const [composeSourceId, setComposeSourceId] = useState('')
+  const pools = useQuery({ queryKey: ['resource-pools'], queryFn: api.resourcePools, refetchInterval: false })
+  const templates = useQuery({ queryKey: ['templates'], queryFn: api.templates, refetchInterval: false })
+  const platform = useQuery({ queryKey: ['platform'], queryFn: api.platform, refetchInterval: false })
+  const seed = specResources(initialSpec)
+  const [kind, setKind] = useState<'image' | 'compose'>(initialSpec?.workload.kind ?? 'image')
+  const [name, setName] = useState(initialSpec?.name ?? '')
+  const [imageFields, setImageFields] = useState<ImageFields>(
+    initialSpec?.workload.kind === 'image' ? imageFieldsFromWorkload(initialSpec.workload) : emptyImageFields(),
+  )
+  const [composeSourceId, setComposeSourceId] = useState(initialSpec?.workload.kind === 'compose' ? initialSpec.workload.composeSourceId : '')
   const [composeInput, setComposeInput] = useState<'catalog' | 'path' | 'upload'>('catalog')
   const [composePath, setComposePath] = useState('')
   const [composeFileName, setComposeFileName] = useState('compose.yaml')
   const [composeContent, setComposeContent] = useState('')
-  const [serviceName, setServiceName] = useState('train')
-  const [priority, setPriority] = useState<JobSpec['priority']>('P2')
-  const [gpuMode, setGpuMode] = useState<ResourceRequest['gpuMode']>('auto')
-  const [gpuCount, setGpuCount] = useState(1)
-  const [selectedGPUs, setSelectedGPUs] = useState<string[]>([])
-  const [cpuMode, setCpuMode] = useState<ResourceRequest['cpuMode']>('auto-cores')
-  const [cpuCount, setCpuCount] = useState(8)
-  const [selectedCPUs, setSelectedCPUs] = useState<number[]>([])
-  const [memoryGB, setMemoryGB] = useState(64)
+  const [serviceName, setServiceName] = useState(initialSpec?.workload.kind === 'compose' ? (initialSpec.workload.services[0]?.name ?? 'train') : 'train')
+  const [priority, setPriority] = useState<JobSpec['priority']>(initialSpec?.priority ?? 'P2')
+  const [resourcePoolId, setResourcePoolId] = useState(initialSpec?.resourcePoolId ?? '')
+  const [templateName, setTemplateName] = useState('')
+  const [loadTemplateId, setLoadTemplateId] = useState('')
+  const [gpuMode, setGpuMode] = useState<ResourceRequest['gpuMode']>(seed.gpuMode)
+  const [gpuCount, setGpuCount] = useState(seed.gpuCount)
+  const [selectedGPUs, setSelectedGPUs] = useState<string[]>(seed.gpuUuids ?? [])
+  const [cpuMode, setCpuMode] = useState<ResourceRequest['cpuMode']>(seed.cpuMode)
+  const [cpuCount, setCpuCount] = useState(seed.cpuCount)
+  const [selectedCPUs, setSelectedCPUs] = useState<number[]>(seed.cpuIds ?? [])
+  const [memoryGB, setMemoryGB] = useState(Math.max(1, Math.round(seed.memoryBytes / 1024 ** 3)))
   const [plan, setPlan] = useState<JobPlan>()
   const [planKey, setPlanKey] = useState('')
 
@@ -72,8 +89,32 @@ export function NewJobDialog({ topology, onClose }: { topology?: Topology; onClo
       services: [{ name: serviceName, class: 'training', resources: resources() }],
     },
     resources: kind === 'image' ? resources() : emptyResources(),
+    ...(resourcePoolId ? { resourcePoolId } : {}),
     stopGraceSeconds: 30,
   })
+
+  const applySpec = (spec: JobSpec) => {
+    const next = specResources(spec)
+    setName(spec.name)
+    setPriority(spec.priority)
+    setKind(spec.workload.kind)
+    setResourcePoolId(spec.resourcePoolId ?? '')
+    setGpuMode(next.gpuMode)
+    setGpuCount(next.gpuCount)
+    setSelectedGPUs(next.gpuUuids ?? [])
+    setCpuMode(next.cpuMode)
+    setCpuCount(next.cpuCount)
+    setSelectedCPUs(next.cpuIds ?? [])
+    setMemoryGB(Math.max(1, Math.round(next.memoryBytes / 1024 ** 3)))
+    if (spec.workload.kind === 'image') {
+      setImageFields(imageFieldsFromWorkload(spec.workload))
+    } else {
+      setComposeInput('catalog')
+      setComposeSourceId(spec.workload.composeSourceId)
+      setServiceName(spec.workload.services[0]?.name ?? 'train')
+    }
+    setPlan(undefined)
+  }
 
   const fingerprint = () => JSON.stringify({ spec: buildSpec(), composeInput, composePath, composeFileName, composeContent })
 
@@ -119,6 +160,13 @@ export function NewJobDialog({ topology, onClose }: { topology?: Topology; onClo
       onClose()
     },
   })
+  const saveTemplate = useMutation({
+    mutationFn: () => api.createTemplate(templateName.trim(), buildSpec()),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['templates'] })
+      setTemplateName('')
+    },
+  })
 
   const toggleGPU = (uuid: string) => {
     setSelectedGPUs((current) => {
@@ -160,11 +208,37 @@ export function NewJobDialog({ topology, onClose }: { topology?: Topology; onClo
                 <label>任务名称<input value={name} onChange={(event) => setName(event.target.value)} placeholder="experiment-a800-01" /></label>
                 <label>优先级<select value={priority} onChange={(event) => setPriority(event.target.value as JobSpec['priority'])}><option>P2</option><option>P3</option><option>P1</option><option>P0</option></select></label>
               </div>
+              <label>资源池<select value={resourcePoolId} onChange={(event) => { setResourcePoolId(event.target.value); setPlan(undefined) }}>
+                <option value="">不限制（全机可分配资源）</option>
+                {(pools.data ?? []).map((pool) => (
+                  <option key={pool.id} value={pool.id}>{pool.name} · {pool.gpuUuids.length} GPU · {pool.cpuIds.length} CPU</option>
+                ))}
+              </select></label>
+              <div className="field-grid two">
+                <label>从模板加载<select value={loadTemplateId} onChange={(event) => {
+                  const item = (templates.data ?? []).find((template) => template.id === event.target.value)
+                  setLoadTemplateId('')
+                  if (item) applySpec(item.spec)
+                }}>
+                  <option value="">选择模板</option>
+                  {(templates.data ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select></label>
+                <label>存为模板
+                  <span className="inline-save">
+                    <input value={templateName} onChange={(event) => setTemplateName(event.target.value)} placeholder="模板名称" />
+                    <button type="button" className="text-button" disabled={!templateName.trim() || !name.trim() || saveTemplate.isPending} onClick={() => saveTemplate.mutate()}>
+                      {saveTemplate.isPending ? '保存中…' : '保存'}
+                    </button>
+                  </span>
+                </label>
+              </div>
+              {saveTemplate.error && <div className="plan-conflict">{String(saveTemplate.error.message)}</div>}
               {kind === 'image' ? (
                 <JobImageFields
                   images={images.data ?? []}
                   value={imageFields}
                   memoryGB={memoryGB}
+                  allowedRoots={platform.data?.allowedMountRoots}
                   onChange={(next) => { setImageFields(next); setPlan(undefined) }}
                   onMemory={(gb) => { setMemoryGB(gb); setPlan(undefined) }}
                 />

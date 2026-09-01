@@ -87,8 +87,10 @@ export const api = {
   changePassword: (currentPassword: string, newPassword: string) => mutate<void>('/me/password', 'POST', { currentPassword, newPassword }),
   createTeam: (name: string) => mutate<Team>('/teams', 'POST', { name }),
   createUser: (value: { username: string; password: string; role: User['role']; email?: string; teamId?: string }) => mutate<User>('/users', 'POST', value),
+  updateUser: (id: string, value: { role: User['role']; teamId: string; disabled: boolean }) => mutate<void>(`/users/${id}`, 'PATCH', value),
   upsertQuota: (value: Quota) => mutate<Quota>('/quotas', 'POST', value),
   createResourcePool: (value: { name: string; cpuIds: number[]; gpuUuids: string[]; numaNodes: number[]; shared: boolean }) => mutate<ResourcePool>('/resource-pools', 'POST', value),
   createTemplate: (name: string, spec: JobSpec) => mutate<Template>('/templates', 'POST', { name, spec }),
+  platform: () => request<{ allowedMountRoots: string[] }>('/platform'),
   markNotificationRead: (id: string) => mutate<void>(`/notifications/${id}`, 'PATCH'),
 }

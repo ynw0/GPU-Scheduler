@@ -252,6 +252,11 @@ h1 { font-size: 25px; margin-bottom: 0; letter-spacing: -.025em; font-weight: 60
 .thread-choice.selected { border-color: var(--green); background: #1d382b; color: var(--green); }
 .thread-choice:disabled { opacity: .25; cursor: not-allowed; }
 .field-hint { display: block; margin-top: 8px; color: #7d8982; font-size: 11px; }
+.inline-save { display: flex; gap: 8px; align-items: center; }
+.inline-save input { flex: 1; min-width: 0; }
+.inline-save .text-button { flex-shrink: 0; height: 39px; padding: 0 12px; }
+.job-spec { margin: 16px 0 8px; }
+.job-spec .plan-line strong { max-width: 72%; text-align: right; word-break: break-all; }
 .checkbox-row { flex-direction: row !important; align-items: center; gap: 8px !important; color: #cbd3ce !important; font-size: 12px !important; }
 .job-detail-dialog { width: min(1080px, calc(100vw - 48px)); }
 .job-detail-body { min-height: 420px; }
