@@ -61,6 +61,10 @@ export function HostContainersPage({ role }: { role: User['role'] }) {
             <span>{gpuLabel(item)}</span>
             <span>
               {item.training ? '训练中' : '空闲'}
+              {item.dockerHealth && item.dockerHealth !== 'none' ? ` · ${item.dockerHealth}` : ''}
+              {item.cpuActivity ? ' · CPU' : ''}
+              {item.gpuActivity ? ' · GPU' : ''}
+              {item.oomUnder ? ' · OOM' : ''}
               {item.memoryUsedBytes ? ` · ${formatBytes(item.memoryUsedBytes)}` : ''}
               {item.gpus?.length ? ` · GPU ${item.gpus.map((gpu) => `${gpu.utilizationPercent}%`).join('/')}` : ''}
             </span>

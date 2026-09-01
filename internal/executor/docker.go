@@ -13,6 +13,7 @@ import (
 
 	"gpu-scheduler/internal/dockerhost"
 	"gpu-scheduler/internal/domain"
+	"gpu-scheduler/internal/heartbeat"
 	"gpu-scheduler/internal/inventory"
 )
 
@@ -82,6 +83,11 @@ func (d *Docker) CreateImage(ctx context.Context, request ImageCreateRequest) (R
 		environment = append(environment, key+"="+value)
 	}
 	initProcess := true
+	if request.HeartbeatDir != "" {
+		mounts = append(mounts, mount.Mount{
+			Type: mount.TypeBind, Source: request.HeartbeatDir, Target: heartbeat.ContainerDir, ReadOnly: true,
+		})
+	}
 	hostConfig := &container.HostConfig{
 		Resources: container.Resources{
 			CpusetCpus: inventory.FormatCPUList(request.Plan.CPUIds),
@@ -207,6 +213,7 @@ func (d *Docker) DiscoverContainerClaims(ctx context.Context) ([]domain.Containe
 		claim := domain.ContainerClaim{
 			ContainerID: item.ID, Name: strings.TrimPrefix(firstName(item.Names), "/"), Image: item.Image,
 			State: string(item.State), ExitCode: info.State.ExitCode, ManagedJobID: item.Labels[LabelJobID],
+			PID: info.State.Pid, RuntimeHeartbeatAt: time.Now().UTC(), DockerHealth: dockerHealth(info.State),
 		}
 		if info.HostConfig.CpusetCpus == "" {
 			claim.CPUUnbounded = true
@@ -236,6 +243,13 @@ func (d *Docker) DiscoverContainerClaims(ctx context.Context) ([]domain.Containe
 		claims = append(claims, claim)
 	}
 	return claims, nil
+}
+
+func dockerHealth(state *container.State) string {
+	if state == nil || state.Health == nil || state.Health.Status == "" {
+		return "none"
+	}
+	return string(state.Health.Status)
 }
 
 func firstName(names []string) string {

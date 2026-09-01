@@ -251,7 +251,9 @@ func hostContainerFrom(claim domain.ContainerClaim, record domain.DiscoveredCont
 		ContainerID: claim.ContainerID, Name: claim.Name, Image: claim.Image, State: claim.State,
 		CPUIds: claim.CPUIds, GPUUUIDs: claim.GPUUUIDs, CPUUnbounded: claim.CPUUnbounded, GPUUnbounded: claim.GPUUnbounded,
 		Training:         len(claim.TrainingGPUUUIDs) > 0 && claimLive(claim.State),
-		TrainingGPUUUIDs: claim.TrainingGPUUUIDs, Priority: priority, PriorityLocked: record.PriorityLocked,
+		TrainingGPUUUIDs: claim.TrainingGPUUUIDs,
+		DockerHealth:     claim.DockerHealth, CPUActivity: claim.CPUActivity, GPUActivity: claim.GPUActivity, OOMUnder: claim.OOMUnder,
+		Priority: priority, PriorityLocked: record.PriorityLocked,
 		LastTrainingAt: record.LastTrainingAt, FirstSeenAt: firstSeen, SilentSeconds: silent,
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"gpu-scheduler/internal/auth"
 	"gpu-scheduler/internal/domain"
@@ -95,7 +96,7 @@ func (s *Server) execute(ctx context.Context, reservation scheduler.ReservationR
 		plan := reservation.ServicePlans["main"]
 		runtime, err = s.agent.CreateImage(ctx, executor.ImageCreateRequest{
 			JobID: job.ID, AttemptID: attemptID, Name: "gs-" + job.ID[:12], Workload: job.Spec.Workload.AsImage(),
-			Plan: toServicePlan("main", plan, job.Spec.Resources), StopTimeout: job.Spec.StopGraceSeconds,
+			Plan: toServicePlan("main", plan, job.Spec.Resources, true), StopTimeout: job.Spec.StopGraceSeconds,
 		})
 	} else {
 		source, sourceErr := s.store.GetComposeSource(ctx, job.Spec.Workload.ComposeSourceID)
@@ -105,7 +106,7 @@ func (s *Server) execute(ctx context.Context, reservation scheduler.ReservationR
 		}
 		plans := make(map[string]executor.ServicePlan)
 		for _, service := range job.Spec.Workload.Services {
-			plans[service.Name] = toServicePlan(service.Name, reservation.ServicePlans[service.Name], service.Resources)
+			plans[service.Name] = toServicePlan(service.Name, reservation.ServicePlans[service.Name], service.Resources, strings.EqualFold(service.Class, "training"))
 		}
 		runtime, _, err = s.agent.CreateCompose(ctx, executor.ComposeCreateRequest{
 			JobID: job.ID, AttemptID: attemptID, ProjectName: "gs-" + job.ID[:12], Source: source, Plans: plans,
@@ -172,11 +173,14 @@ func (s *Server) getJob(w http.ResponseWriter, r *http.Request) {
 	}
 	detail := domain.JobDetail{Job: job}
 	detail.Allocations, _ = s.store.AllocationsForJob(r.Context(), job.ID)
-	if attempt, err := s.store.LatestAttempt(r.Context(), job.ID); err == nil {
-		detail.Attempt = &attempt
-	}
 	if heartbeat, err := s.store.GetHeartbeat(r.Context(), job.ID); err == nil {
 		detail.Heartbeat = &heartbeat
+	}
+	if attempt, err := s.store.LatestAttempt(r.Context(), job.ID); err == nil {
+		detail.Attempt = &attempt
+		if claims, err := s.agent.Claims(r.Context()); err == nil {
+			detail.Runtime = runtimeForJob(job.ID, claims)
+		}
 	}
 	writeJSON(w, 200, detail)
 }
@@ -204,7 +208,21 @@ func (s *Server) heartbeat(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 422, "Invalid heartbeat phase", value.Phase)
 		return
 	}
-	if err := s.store.RecordHeartbeat(r.Context(), job.ID, value.Phase, value.Epoch, value.Step, value.Progress); err != nil {
+	attempt, err := s.store.LatestAttempt(r.Context(), job.ID)
+	if err != nil {
+		writeProblem(w, 409, "No running attempt", "")
+		return
+	}
+	service := heartbeatServiceName(job)
+	if service == "" {
+		writeProblem(w, 422, "Job has no training service", "")
+		return
+	}
+	if err := s.store.RecordHeartbeat(r.Context(), domain.TrainingHeartbeatReport{
+		AttemptID: attempt.ID, ServiceName: service, Phase: value.Phase,
+		Epoch: value.Epoch, Step: value.Step, Progress: value.Progress,
+		ReceivedAt: time.Now().UTC(),
+	}); err != nil {
 		writeProblem(w, 500, "Heartbeat failed", err.Error())
 		return
 	}
@@ -315,8 +333,8 @@ func normalizeJobSpec(spec *domain.JobSpec) {
 	}
 }
 
-func toServicePlan(name string, plan domain.JobPlan, request domain.ResourceRequest) executor.ServicePlan {
-	return executor.ServicePlan{Name: name, CPUIds: plan.CPUIds, GPUUUIDs: plan.GPUUUIDs, NUMANodes: plan.NUMANodes, MemoryBytes: request.MemoryBytes}
+func toServicePlan(name string, plan domain.JobPlan, request domain.ResourceRequest, training bool) executor.ServicePlan {
+	return executor.ServicePlan{Name: name, CPUIds: plan.CPUIds, GPUUUIDs: plan.GPUUUIDs, NUMANodes: plan.NUMANodes, MemoryBytes: request.MemoryBytes, Training: training}
 }
 
 func canAccessJob(identity auth.Identity, job domain.Job) bool {

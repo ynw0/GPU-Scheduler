@@ -268,17 +268,23 @@ type JobMetricSnapshot struct {
 }
 
 type ContainerClaim struct {
-	ContainerID      string   `json:"containerId"`
-	Name             string   `json:"name"`
-	Image            string   `json:"image"`
-	State            string   `json:"state"`
-	ExitCode         int      `json:"exitCode,omitempty"`
-	ManagedJobID     string   `json:"managedJobId,omitempty"`
-	CPUIds           []int    `json:"cpuIds"`
-	GPUUUIDs         []string `json:"gpuUuids"`
-	CPUUnbounded     bool     `json:"cpuUnbounded"`
-	GPUUnbounded     bool     `json:"gpuUnbounded"`
-	TrainingGPUUUIDs []string `json:"trainingGpuUuids,omitempty"`
+	ContainerID        string    `json:"containerId"`
+	Name               string    `json:"name"`
+	Image              string    `json:"image"`
+	State              string    `json:"state"`
+	ExitCode           int       `json:"exitCode,omitempty"`
+	ManagedJobID       string    `json:"managedJobId,omitempty"`
+	CPUIds             []int     `json:"cpuIds"`
+	GPUUUIDs           []string  `json:"gpuUuids"`
+	CPUUnbounded       bool      `json:"cpuUnbounded"`
+	GPUUnbounded       bool      `json:"gpuUnbounded"`
+	TrainingGPUUUIDs   []string  `json:"trainingGpuUuids,omitempty"`
+	PID                int       `json:"pid,omitempty"`
+	RuntimeHeartbeatAt time.Time `json:"runtimeHeartbeatAt"`
+	DockerHealth       string    `json:"dockerHealth"`
+	CPUActivity        bool      `json:"cpuActivity"`
+	GPUActivity        bool      `json:"gpuActivity"`
+	OOMUnder           bool      `json:"oomUnder"`
 }
 
 type DiscoveredContainer struct {
@@ -312,6 +318,10 @@ type HostContainer struct {
 	MemoryUsedBytes  uint64      `json:"memoryUsedBytes,omitempty"`
 	MemoryLimitBytes uint64      `json:"memoryLimitBytes,omitempty"`
 	GPUs             []GPUMetric `json:"gpus,omitempty"`
+	DockerHealth     string      `json:"dockerHealth"`
+	CPUActivity      bool        `json:"cpuActivity"`
+	GPUActivity      bool        `json:"gpuActivity"`
+	OOMUnder         bool        `json:"oomUnder"`
 	Priority         Priority    `json:"priority"`
 	PriorityLocked   bool        `json:"priorityLocked"`
 	LastTrainingAt   *time.Time  `json:"lastTrainingAt,omitempty"`
@@ -320,30 +330,55 @@ type HostContainer struct {
 }
 
 type JobAttempt struct {
-	ID            string            `json:"id"`
-	JobID         string            `json:"jobId"`
-	AttemptNumber int               `json:"attemptNumber"`
-	State         string            `json:"state"`
-	Kind          string            `json:"kind,omitempty"`
-	Project       string            `json:"project,omitempty"`
-	ContainerIDs  map[string]string `json:"containerIds,omitempty"`
-	CreatedAt     time.Time         `json:"createdAt"`
-	FinishedAt    *time.Time        `json:"finishedAt,omitempty"`
+	ID              string            `json:"id"`
+	JobID           string            `json:"jobId"`
+	AttemptNumber   int               `json:"attemptNumber"`
+	State           string            `json:"state"`
+	Kind            string            `json:"kind,omitempty"`
+	Project         string            `json:"project,omitempty"`
+	ContainerIDs    map[string]string `json:"containerIds,omitempty"`
+	HeartbeatMisses int               `json:"heartbeatMisses,omitempty"`
+	CreatedAt       time.Time         `json:"createdAt"`
+	FinishedAt      *time.Time        `json:"finishedAt,omitempty"`
+}
+
+type RuntimeHeartbeat struct {
+	ObservedAt   time.Time `json:"observedAt"`
+	DockerHealth string    `json:"dockerHealth"`
+	CPUActivity  bool      `json:"cpuActivity"`
+	GPUActivity  bool      `json:"gpuActivity"`
+	OOMUnder     bool      `json:"oomUnder"`
 }
 
 type JobDetail struct {
 	Job
-	Allocations []Allocation    `json:"allocations"`
-	Attempt     *JobAttempt     `json:"attempt,omitempty"`
-	Heartbeat   *TrainingStatus `json:"heartbeat,omitempty"`
+	Allocations []Allocation      `json:"allocations"`
+	Attempt     *JobAttempt       `json:"attempt,omitempty"`
+	Heartbeat   *TrainingStatus   `json:"heartbeat,omitempty"`
+	Runtime     *RuntimeHeartbeat `json:"runtime,omitempty"`
 }
 
 type TrainingStatus struct {
-	Phase      string    `json:"phase"`
-	Epoch      *int      `json:"epoch,omitempty"`
-	Step       *int      `json:"step,omitempty"`
-	Progress   *float64  `json:"progress,omitempty"`
-	ReportedAt time.Time `json:"reportedAt"`
+	AttemptID   string    `json:"attemptId,omitempty"`
+	ServiceName string    `json:"serviceName,omitempty"`
+	Sequence    int       `json:"sequence,omitempty"`
+	Phase       string    `json:"phase"`
+	Epoch       *int      `json:"epoch,omitempty"`
+	Step        *int      `json:"step,omitempty"`
+	Progress    *float64  `json:"progress,omitempty"`
+	ReportedAt  time.Time `json:"reportedAt"`
+	AgeSeconds  int64     `json:"ageSeconds"`
+}
+
+type TrainingHeartbeatReport struct {
+	AttemptID   string    `json:"attemptId"`
+	ServiceName string    `json:"serviceName"`
+	Sequence    int       `json:"sequence"`
+	Phase       string    `json:"phase"`
+	Epoch       *int      `json:"epoch,omitempty"`
+	Step        *int      `json:"step,omitempty"`
+	Progress    *float64  `json:"progress,omitempty"`
+	ReceivedAt  time.Time `json:"receivedAt"`
 }
 
 type Team struct {

@@ -93,26 +93,6 @@ func (s *Store) ReleaseAllocations(ctx context.Context, jobID string) error {
 	return err
 }
 
-func (s *Store) RecordHeartbeat(ctx context.Context, jobID, phase string, epoch, step *int, progress *float64) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO training_heartbeats(job_id,phase,epoch,step,progress,reported_at)
-        VALUES(?,?,?,?,?,?) ON CONFLICT(job_id) DO UPDATE SET
-        phase=excluded.phase,epoch=excluded.epoch,step=excluded.step,progress=excluded.progress,reported_at=excluded.reported_at`,
-		jobID, phase, epoch, step, progress, time.Now().UTC().Format(time.RFC3339Nano))
-	return err
-}
-
-func (s *Store) GetHeartbeat(ctx context.Context, jobID string) (domain.TrainingStatus, error) {
-	var status domain.TrainingStatus
-	var reported string
-	err := s.db.QueryRowContext(ctx, `SELECT phase,epoch,step,progress,reported_at FROM training_heartbeats WHERE job_id=?`, jobID).
-		Scan(&status.Phase, &status.Epoch, &status.Step, &status.Progress, &reported)
-	if err != nil {
-		return domain.TrainingStatus{}, err
-	}
-	status.ReportedAt, _ = time.Parse(time.RFC3339Nano, reported)
-	return status, nil
-}
-
 func (s *Store) ListJobsByState(ctx context.Context, states ...domain.JobState) ([]domain.Job, error) {
 	if len(states) == 0 {
 		return nil, nil

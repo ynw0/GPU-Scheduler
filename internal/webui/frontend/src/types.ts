@@ -68,7 +68,24 @@ export interface Job {
   spec?: JobSpec
   allocations?: Allocation[]
   attempt?: JobAttempt
-  heartbeat?: { phase: string; epoch?: number; step?: number; progress?: number }
+  heartbeat?: {
+    attemptId?: string
+    serviceName?: string
+    sequence?: number
+    phase: string
+    epoch?: number
+    step?: number
+    progress?: number
+    reportedAt: string
+    ageSeconds: number
+  }
+  runtime?: {
+    observedAt: string
+    dockerHealth: string
+    cpuActivity: boolean
+    gpuActivity: boolean
+    oomUnder: boolean
+  }
 }
 
 export interface Allocation {
@@ -221,6 +238,10 @@ export interface HostContainer {
   memoryUsedBytes?: number
   memoryLimitBytes?: number
   gpus?: JobMetricSnapshot['gpus']
+  dockerHealth?: string
+  cpuActivity?: boolean
+  gpuActivity?: boolean
+  oomUnder?: boolean
   priority: Job['priority']
   priorityLocked: boolean
   lastTrainingAt?: string

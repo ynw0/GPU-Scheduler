@@ -58,9 +58,9 @@ func (s *Store) LatestAttempt(ctx context.Context, jobID string) (domain.JobAtte
 	var attempt domain.JobAttempt
 	var runtimeJSON, createdAt string
 	var finishedAt sql.NullString
-	err := s.db.QueryRowContext(ctx, `SELECT id,job_id,attempt_number,state,COALESCE(runtime_ref,''),created_at,finished_at
+	err := s.db.QueryRowContext(ctx, `SELECT id,job_id,attempt_number,state,COALESCE(runtime_ref,''),COALESCE(heartbeat_misses,0),created_at,finished_at
         FROM job_attempts WHERE job_id=? ORDER BY attempt_number DESC LIMIT 1`, jobID).
-		Scan(&attempt.ID, &attempt.JobID, &attempt.AttemptNumber, &attempt.State, &runtimeJSON, &createdAt, &finishedAt)
+		Scan(&attempt.ID, &attempt.JobID, &attempt.AttemptNumber, &attempt.State, &runtimeJSON, &attempt.HeartbeatMisses, &createdAt, &finishedAt)
 	if err != nil {
 		return domain.JobAttempt{}, err
 	}

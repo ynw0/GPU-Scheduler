@@ -109,6 +109,25 @@ func (c *Client) RemoveAttempt(ctx context.Context, attemptID string) error {
 	return c.postJSON(ctx, c.longClient, "/internal/v1/workloads/remove", map[string]any{"attemptId": attemptID}, nil)
 }
 
+func (c *Client) EnsureHeartbeat(ctx context.Context, attemptID string) error {
+	return c.postJSON(ctx, c.httpClient, "/internal/v1/heartbeats/ensure", map[string]any{"attemptId": attemptID}, nil)
+}
+
+func (c *Client) CloseHeartbeat(ctx context.Context, attemptID string) error {
+	return c.postJSON(ctx, c.httpClient, "/internal/v1/heartbeats/close", map[string]any{"attemptId": attemptID}, nil)
+}
+
+func (c *Client) ListHeartbeats(ctx context.Context) ([]domain.TrainingHeartbeatReport, error) {
+	var result []domain.TrainingHeartbeatReport
+	if err := c.getJSON(ctx, "/internal/v1/heartbeats", &result); err != nil {
+		return nil, err
+	}
+	if result == nil {
+		result = []domain.TrainingHeartbeatReport{}
+	}
+	return result, nil
+}
+
 func (c *Client) Logs(ctx context.Context, containerID string, follow bool) (io.ReadCloser, error) {
 	path := "/internal/v1/workloads/logs?containerId=" + containerID
 	if follow {

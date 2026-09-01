@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"gpu-scheduler/internal/dockerhost"
+	"gpu-scheduler/internal/heartbeat"
 )
 
 type Compose struct {
@@ -69,7 +70,7 @@ func (c *Compose) Prepare(ctx context.Context, request ComposeCreateRequest) (Ef
 		if !ok {
 			return EffectiveCompose{}, fmt.Errorf("service %s is malformed", name)
 		}
-		applyServicePlan(service, plan, request.JobID, request.AttemptID)
+		applyServicePlan(service, plan, request.JobID, request.AttemptID, heartbeat.Dir(c.stateDir, request.AttemptID))
 	}
 	for name := range request.Plans {
 		if _, exists := services[name]; !exists {
@@ -167,7 +168,7 @@ func resolveComposeSource(source ComposeSource) (string, string, error) {
 	return root, entry, nil
 }
 
-func applyServicePlan(service map[string]any, plan ServicePlan, jobID, attemptID string) {
+func applyServicePlan(service map[string]any, plan ServicePlan, jobID, attemptID, heartbeatDir string) {
 	service["cpuset"] = formatIntList(plan.CPUIds)
 	service["mem_limit"] = plan.MemoryBytes
 	delete(service, "memswap_limit")
@@ -202,6 +203,13 @@ func applyServicePlan(service map[string]any, plan ServicePlan, jobID, attemptID
 	deploy["resources"] = resources
 	service["deploy"] = deploy
 	delete(service, "gpus")
+	if plan.Training && heartbeatDir != "" {
+		volumes := anySlice(service["volumes"])
+		volumes = append(volumes, map[string]any{
+			"type": "bind", "source": heartbeatDir, "target": heartbeat.ContainerDir, "read_only": true,
+		})
+		service["volumes"] = volumes
+	}
 }
 
 func formatIntList(values []int) string {

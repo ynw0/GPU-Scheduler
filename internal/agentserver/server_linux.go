@@ -9,7 +9,9 @@ import (
 	"net/http"
 
 	"gpu-scheduler/internal/config"
+	"gpu-scheduler/internal/domain"
 	"gpu-scheduler/internal/executor"
+	"gpu-scheduler/internal/heartbeat"
 	"gpu-scheduler/internal/host"
 	"gpu-scheduler/internal/monitor"
 	"gpu-scheduler/internal/platform"
@@ -21,6 +23,7 @@ type Server struct {
 	compose    *executor.Compose
 	validator  *executor.SecurityValidator
 	monitor    *monitor.LinuxCollector
+	heartbeats *heartbeat.Hub
 	platform   platform.Runtime
 	mux        *http.ServeMux
 }
@@ -52,7 +55,8 @@ func New(ctx context.Context, cfg config.Config) (*Server, error) {
 	}
 	s := &Server{
 		discoverer: host.NewLinuxDiscoverer(), docker: docker, validator: validator,
-		compose: executor.NewCompose(docker, validator, cfg.Agent.StateDirectory, cfg.Agent.DockerSocket), monitor: collector, platform: target,
+		compose: executor.NewCompose(docker, validator, cfg.Agent.StateDirectory, cfg.Agent.DockerSocket),
+		monitor: collector, heartbeats: heartbeat.NewHub(cfg.Agent.StateDirectory), platform: target,
 		mux: http.NewServeMux(),
 	}
 	s.routes()
@@ -60,6 +64,7 @@ func New(ctx context.Context, cfg config.Config) (*Server, error) {
 }
 
 func (s *Server) Close() {
+	s.heartbeats.Close()
 	s.monitor.Close()
 	_ = s.docker.Close()
 }
@@ -80,6 +85,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /internal/v1/workloads/logs", s.logs)
 	s.mux.HandleFunc("GET /internal/v1/gpu-host-processes", s.hostGPUProcesses)
 	s.mux.HandleFunc("POST /internal/v1/containers/stop", s.stopContainer)
+	s.mux.HandleFunc("GET /internal/v1/heartbeats", s.listHeartbeats)
+	s.mux.HandleFunc("POST /internal/v1/heartbeats/ensure", s.ensureHeartbeat)
+	s.mux.HandleFunc("POST /internal/v1/heartbeats/close", s.closeHeartbeat)
 }
 
 func (s *Server) containerMetrics(w http.ResponseWriter, r *http.Request) {
@@ -144,8 +152,27 @@ func (s *Server) claims(w http.ResponseWriter, r *http.Request) {
 				claims[i].TrainingGPUUUIDs = append(claims[i].TrainingGPUUUIDs, uuids...)
 			}
 		}
+		s.enrichRuntime(claims[i].ContainerID, &claims[i])
 	}
 	writeJSON(w, 200, claims)
+}
+
+func (s *Server) enrichRuntime(containerID string, claim *domain.ContainerClaim) {
+	claim.GPUActivity = len(claim.TrainingGPUUUIDs) > 0
+	if claim.PID <= 0 || (claim.State != "running" && claim.State != "paused") {
+		return
+	}
+	sample, err := s.monitor.SampleContainer(containerID, claim.PID)
+	if err != nil {
+		return
+	}
+	claim.OOMUnder = sample.OOMUnder
+	for _, percent := range sample.CPUPercentByID {
+		if percent >= 0.5 {
+			claim.CPUActivity = true
+			return
+		}
+	}
 }
 
 func (s *Server) createImage(w http.ResponseWriter, r *http.Request) {
@@ -158,6 +185,12 @@ func (s *Server) createImage(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 422, map[string]string{"error": err.Error()})
 		return
 	}
+	dir, err := s.heartbeats.Ensure(request.AttemptID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	request.HeartbeatDir = dir
 	ref, err := s.docker.CreateImage(r.Context(), request)
 	if err != nil {
 		writeError(w, err)
@@ -176,6 +209,12 @@ func (s *Server) createCompose(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, 400, map[string]string{"error": err.Error()})
 		return
+	}
+	if needsTrainingHeartbeat(body.Request.Plans) {
+		if _, err := s.heartbeats.Ensure(body.Request.AttemptID); err != nil {
+			writeError(w, err)
+			return
+		}
 	}
 	effective, err := s.compose.Prepare(r.Context(), body.Request)
 	if err != nil {
@@ -218,7 +257,51 @@ func (s *Server) removeAttempt(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	_ = s.heartbeats.CloseAttempt(body.AttemptID)
 	w.WriteHeader(204)
+}
+
+func (s *Server) listHeartbeats(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, 200, s.heartbeats.Latest())
+}
+
+func (s *Server) ensureHeartbeat(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		AttemptID string `json:"attemptId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.AttemptID == "" {
+		writeJSON(w, 400, map[string]string{"error": "attemptId required"})
+		return
+	}
+	if _, err := s.heartbeats.Ensure(body.AttemptID); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(204)
+}
+
+func (s *Server) closeHeartbeat(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		AttemptID string `json:"attemptId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.AttemptID == "" {
+		writeJSON(w, 400, map[string]string{"error": "attemptId required"})
+		return
+	}
+	if err := s.heartbeats.CloseAttempt(body.AttemptID); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(204)
+}
+
+func needsTrainingHeartbeat(plans map[string]executor.ServicePlan) bool {
+	for _, plan := range plans {
+		if plan.Training {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) logs(w http.ResponseWriter, r *http.Request) {

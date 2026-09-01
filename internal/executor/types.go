@@ -15,15 +15,17 @@ type ServicePlan struct {
 	NUMANodes   []int
 	MemoryBytes uint64
 	Shared      bool
+	Training    bool
 }
 
 type ImageCreateRequest struct {
-	JobID       string
-	AttemptID   string
-	Name        string
-	Workload    domain.ImageWorkload
-	Plan        ServicePlan
-	StopTimeout int
+	JobID        string
+	AttemptID    string
+	Name         string
+	Workload     domain.ImageWorkload
+	Plan         ServicePlan
+	StopTimeout  int
+	HeartbeatDir string
 }
 
 type RuntimeRef struct {

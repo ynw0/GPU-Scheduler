@@ -67,7 +67,7 @@ export function App() {
   const jobs = useQuery({ queryKey: ['jobs'], queryFn: api.jobs, enabled: authenticated })
   const notifications = useQuery({ queryKey: ['notifications'], queryFn: api.notifications, enabled: authenticated })
   const templates = useQuery({ queryKey: ['templates'], queryFn: api.templates, enabled: authenticated && section === 'templates' })
-  const selectedJob = useQuery({ queryKey: ['job', selectedJobId], queryFn: () => api.job(selectedJobId!), enabled: Boolean(selectedJobId) })
+  const selectedJob = useQuery({ queryKey: ['job', selectedJobId], queryFn: () => api.job(selectedJobId!), enabled: Boolean(selectedJobId), refetchInterval: 5000 })
 
   useEffect(() => {
     if (!authenticated) return

@@ -144,6 +144,7 @@ func (s *Server) reconcileOnce(ctx context.Context) {
 	}
 	s.syncHostContainers(ctx, claims)
 	s.preemptExternal(ctx, claims)
+	s.reconcileHeartbeats(ctx, claims, active)
 	for _, job := range active {
 		claimsForJob := byJob[job.ID]
 		switch job.State {
@@ -185,6 +186,7 @@ func (s *Server) finishJob(ctx context.Context, job domain.Job, to domain.JobSta
 	_ = s.store.ReleaseAllocations(ctx, job.ID)
 	if attempt, err := s.store.LatestAttempt(ctx, job.ID); err == nil {
 		_ = s.store.FinishAttempt(ctx, attempt.ID, string(to), store.RuntimeFromAttempt(attempt))
+		_ = s.agent.CloseHeartbeat(ctx, attempt.ID)
 	}
 	_, _ = s.notifier.Publish(ctx, job.OwnerID, severityFor(to), "任务 "+string(to), job.Name+": "+reason)
 	s.events.Publish("job", job.ID)

@@ -67,7 +67,22 @@ export function JobDetail({
         <div className="dialog-body job-detail-body">
           <div className="form-column">
             <p>状态 {statusLabel(job.state)} · 优先级 {job.priority}</p>
-            {job.heartbeat && <p>训练阶段 {job.heartbeat.phase}</p>}
+            {job.heartbeat && (
+              <p>
+                训练心跳 {job.heartbeat.phase}
+                {job.heartbeat.epoch != null ? ` · epoch ${job.heartbeat.epoch}` : ''}
+                {job.heartbeat.step != null ? ` · step ${job.heartbeat.step}` : ''}
+                {` · ${job.heartbeat.ageSeconds}s 前`}
+              </p>
+            )}
+            {job.runtime && (
+              <p>
+                运行探测 {job.runtime.dockerHealth || 'none'}
+                {job.runtime.cpuActivity ? ' · CPU 活动' : ' · CPU 静'}
+                {job.runtime.gpuActivity ? ' · GPU 活动' : ' · GPU 静'}
+                {job.runtime.oomUnder ? ' · OOM' : ''}
+              </p>
+            )}
             {(job.allocations ?? []).map((item) => (
               <div className="plan-line" key={item.id}><span>{item.resourceType}</span><strong>{item.resourceId}</strong></div>
             ))}
@@ -87,8 +102,8 @@ export function JobDetail({
             </div>
             <div className="dialog-actions">
               {job.state === 'QUEUED' && <button className="secondary-action" onClick={() => onAction('start')}>立即调度</button>}
-              {job.state === 'RUNNING' && <button className="secondary-action" onClick={() => onAction('stop')}>停止</button>}
-              {['QUEUED', 'RESERVED', 'RUNNING', 'CREATING', 'STARTING'].includes(job.state) && <button className="secondary-action" onClick={() => onAction('cancel')}>取消</button>}
+              {(job.state === 'RUNNING' || job.state === 'DEGRADED' || job.state === 'DRIFTED') && <button className="secondary-action" onClick={() => onAction('stop')}>停止</button>}
+              {['QUEUED', 'RESERVED', 'RUNNING', 'CREATING', 'STARTING', 'DEGRADED', 'DRIFTED'].includes(job.state) && <button className="secondary-action" onClick={() => onAction('cancel')}>取消</button>}
               {job.state === 'FAILED' && <button className="primary-action" onClick={() => onAction('retry')}>重试</button>}
             </div>
           </div>
