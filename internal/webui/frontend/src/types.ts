@@ -242,6 +242,8 @@ export interface HostContainer {
   cpuActivity?: boolean
   gpuActivity?: boolean
   oomUnder?: boolean
+  managedJobId?: string
+  jobName?: string
   priority: Job['priority']
   priorityLocked: boolean
   lastTrainingAt?: string

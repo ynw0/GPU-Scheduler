@@ -26,6 +26,27 @@ function gpuLabel(item: HostContainer): string {
   return `${item.gpuUuids.length} 张卡`
 }
 
+function occupancyLabel(item: HostContainer): string {
+  const parts = [item.training ? '训练中' : '空闲']
+  if (item.dockerHealth && item.dockerHealth !== 'none') parts.push(item.dockerHealth)
+  if (item.cpuActivity) parts.push('CPU')
+  if (item.gpuActivity) parts.push('GPU')
+  if (item.oomUnder) parts.push('OOM')
+  if (item.memoryUsedBytes) parts.push(formatBytes(item.memoryUsedBytes))
+  if (item.gpus?.length) parts.push(`GPU ${item.gpus.map((gpu) => `${gpu.utilizationPercent}%`).join('/')}`)
+  return parts.join(' · ')
+}
+
+function ContainerName({ item }: { item: HostContainer }) {
+  return (
+    <span className="job-name">
+      <i />
+      {item.name}
+      <small>{item.image}</small>
+    </span>
+  )
+}
+
 export function HostContainersPage({ role }: { role: User['role'] }) {
   const queryClient = useQueryClient()
   const items = useQuery({ queryKey: ['host-containers'], queryFn: api.hostContainers, refetchInterval: 10_000 })
@@ -39,56 +60,74 @@ export function HostContainersPage({ role }: { role: User['role'] }) {
   })
   const admin = role === 'Admin'
   const rows = items.data ?? []
+  const internal = rows.filter((item) => item.managedJobId)
+  const external = rows.filter((item) => !item.managedJobId)
 
   return (
     <section className="workload-page overview-enter">
       <div className="section-heading">
-        <div><p className="eyebrow">HOST DOCKER</p><h2>宿主机容器</h2></div>
+        <div><p className="eyebrow">CONTAINERS</p><h2>容器列表</h2></div>
         <span className="module-count">{rows.length} 项</span>
       </div>
-      <div className="full-job-table">
-        <div className="host-row header">
-          <span>容器</span><span>CPU 设置</span><span>GPU 设置</span><span>当前占用</span><span>优先级</span><span>静默</span><span>操作</span>
+      <div className="host-group">
+        <div className="host-group-heading">
+          <h3>内部容器</h3>
+          <span>{internal.length} 项</span>
         </div>
-        {rows.map((item) => (
-          <div className="host-row" key={item.containerId}>
-            <span className="job-name">
-              <i />
-              {item.name}
-              <small>{item.image}</small>
-            </span>
-            <span>{cpuLabel(item)}</span>
-            <span>{gpuLabel(item)}</span>
-            <span>
-              {item.training ? '训练中' : '空闲'}
-              {item.dockerHealth && item.dockerHealth !== 'none' ? ` · ${item.dockerHealth}` : ''}
-              {item.cpuActivity ? ' · CPU' : ''}
-              {item.gpuActivity ? ' · GPU' : ''}
-              {item.oomUnder ? ' · OOM' : ''}
-              {item.memoryUsedBytes ? ` · ${formatBytes(item.memoryUsedBytes)}` : ''}
-              {item.gpus?.length ? ` · GPU ${item.gpus.map((gpu) => `${gpu.utilizationPercent}%`).join('/')}` : ''}
-            </span>
-            <span>
-              {admin ? (
-                <select
-                  className="host-priority"
-                  value={item.priority}
-                  onChange={(event) => patch.mutate({ id: item.containerId, priority: event.target.value as HostContainer['priority'] })}
-                >
-                  <option>P0</option><option>P1</option><option>P2</option><option>P3</option>
-                </select>
-              ) : item.priority}
-              {item.priorityLocked ? ' 锁' : ''}
-            </span>
-            <span className="muted">{formatSilent(item.silentSeconds)}</span>
-            <span>
-              {admin && (item.state === 'running' || item.state === 'paused') && (
-                <button className="text-button" onClick={() => stop.mutate(item.containerId)}>停止</button>
-              )}
-            </span>
+        <div className="full-job-table">
+          <div className="host-row internal header">
+            <span>容器</span><span>CPU 设置</span><span>GPU 设置</span><span>当前占用</span><span>任务</span><span>状态</span>
           </div>
-        ))}
-        {!rows.length && <div className="empty-row"><Box size={22} /><span>没有外部容器</span></div>}
+          {internal.map((item) => (
+            <div className="host-row internal" key={item.containerId}>
+              <ContainerName item={item} />
+              <span>{cpuLabel(item)}</span>
+              <span>{gpuLabel(item)}</span>
+              <span>{occupancyLabel(item)}</span>
+              <span>{item.jobName || item.managedJobId?.slice(0, 8)}</span>
+              <span>{item.state}</span>
+            </div>
+          ))}
+          {!internal.length && <div className="empty-row compact"><Box size={22} /><span>没有内部容器</span></div>}
+        </div>
+      </div>
+      <div className="host-group">
+        <div className="host-group-heading">
+          <h3>外部容器</h3>
+          <span>{external.length} 项</span>
+        </div>
+        <div className="full-job-table">
+          <div className="host-row header">
+            <span>容器</span><span>CPU 设置</span><span>GPU 设置</span><span>当前占用</span><span>优先级</span><span>静默</span><span>操作</span>
+          </div>
+          {external.map((item) => (
+            <div className="host-row" key={item.containerId}>
+              <ContainerName item={item} />
+              <span>{cpuLabel(item)}</span>
+              <span>{gpuLabel(item)}</span>
+              <span>{occupancyLabel(item)}</span>
+              <span>
+                {admin ? (
+                  <select
+                    className="host-priority"
+                    value={item.priority}
+                    onChange={(event) => patch.mutate({ id: item.containerId, priority: event.target.value as HostContainer['priority'] })}
+                  >
+                    <option>P0</option><option>P1</option><option>P2</option><option>P3</option>
+                  </select>
+                ) : item.priority}
+                {item.priorityLocked ? ' 锁' : ''}
+              </span>
+              <span className="muted">{formatSilent(item.silentSeconds)}</span>
+              <span>
+                {admin && (item.state === 'running' || item.state === 'paused') && (
+                  <button className="text-button" onClick={() => stop.mutate(item.containerId)}>停止</button>
+                )}
+              </span>
+            </div>
+          ))}
+          {!external.length && <div className="empty-row compact"><Box size={22} /><span>没有外部容器</span></div>}
+        </div>
       </div>
     </section>
   )

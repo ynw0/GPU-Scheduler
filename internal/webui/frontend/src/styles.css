@@ -178,11 +178,17 @@ h1 { font-size: 25px; margin-bottom: 0; letter-spacing: -.025em; font-weight: 60
 
 .workload-page { margin-top: 22px; border: 1px solid var(--line); background: var(--panel); min-height: 560px; }
 .full-job-table { padding: 0 20px 20px; }
+.empty-row.compact { height: 110px; }
+.host-group + .host-group { border-top: 1px solid var(--line); }
+.host-group-heading { padding: 16px 20px 4px; display: flex; align-items: baseline; justify-content: space-between; }
+.host-group-heading h3 { margin: 0; font-size: 13px; font-weight: 600; }
+.host-group-heading span { color: #92a098; font: 10px 'Cascadia Mono', 'JetBrains Mono', monospace; }
 .full-job-row { min-height: 58px; display: grid; grid-template-columns: 1.7fr .7fr .5fr 1fr 1fr; align-items: center; gap: 14px; border-bottom: 1px solid var(--line-soft); font-size: 11px; }
 .full-job-row.header { min-height: 42px; color: #59655f; font: 8px 'Cascadia Mono', monospace; letter-spacing: .08em; }
 .full-job-row .job-name small { color: #4f5a54; font: 8px 'Cascadia Mono', monospace; margin-left: auto; }
 .host-row { min-height: 58px; display: grid; grid-template-columns: 1.6fr .7fr .7fr 1.1fr .7fr .5fr .5fr; align-items: center; gap: 10px; border-bottom: 1px solid var(--line-soft); font-size: 11px; }
 .host-row.header { min-height: 42px; color: #59655f; font: 8px 'Cascadia Mono', monospace; letter-spacing: .08em; }
+.host-row.internal { grid-template-columns: 1.6fr .7fr .7fr 1.2fr 1fr .6fr; }
 .host-priority { height: 28px; border: 1px solid #2b3530; background: #101613; color: #cbd3ce; font: 11px 'Cascadia Mono', monospace; }
 
 .dialog-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px; background: rgba(2,4,3,.78); backdrop-filter: blur(8px); animation: fade-in .18s ease-out; }

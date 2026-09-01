@@ -34,13 +34,18 @@ func (s *Server) getUnmanaged(w http.ResponseWriter, r *http.Request) {
 		gpuByUUID[gpu.UUID] = gpu
 	}
 	now := time.Now().UTC()
-	result := make([]domain.HostContainer, 0)
+	jobs := map[string]domain.Job{}
+	result := make([]domain.HostContainer, 0, len(claims))
 	for _, claim := range claims {
-		if claim.ManagedJobID != "" {
-			continue
-		}
 		record := byID[claim.ContainerID]
-		item := hostContainerFrom(claim, record, now)
+		if claim.ManagedJobID != "" {
+			if _, ok := jobs[claim.ManagedJobID]; !ok {
+				if found, err := s.store.GetJob(r.Context(), claim.ManagedJobID); err == nil {
+					jobs[claim.ManagedJobID] = found
+				}
+			}
+		}
+		item := hostContainerFrom(claim, record, jobs[claim.ManagedJobID], now)
 		if claimLive(claim.State) {
 			if metric, err := s.agent.ContainerMetrics(r.Context(), claim.ContainerID); err == nil {
 				item.MemoryUsedBytes = metric.MemoryUsedBytes
@@ -84,6 +89,17 @@ func (s *Server) patchHostContainer(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) stopHostContainer(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	claims, err := s.agent.Claims(r.Context())
+	if err != nil {
+		writeProblem(w, 503, "Containers unavailable", err.Error())
+		return
+	}
+	for _, claim := range claims {
+		if claim.ContainerID == id && claim.ManagedJobID != "" {
+			writeProblem(w, 409, "Managed container", "内部容器请从任务详情停止")
+			return
+		}
+	}
 	if err := s.agent.StopContainer(r.Context(), id, 10); err != nil {
 		writeProblem(w, 503, "Stop failed", err.Error())
 		return
@@ -232,7 +248,7 @@ func (s *Server) stopExternal(ctx context.Context, containerID, reason string) {
 	_ = s.store.InsertAudit(ctx, "", "host-container.preempt", "container", containerID, reason)
 }
 
-func hostContainerFrom(claim domain.ContainerClaim, record domain.DiscoveredContainer, now time.Time) domain.HostContainer {
+func hostContainerFrom(claim domain.ContainerClaim, record domain.DiscoveredContainer, job domain.Job, now time.Time) domain.HostContainer {
 	priority := domain.PriorityNormal
 	firstSeen := now
 	if record.ContainerID != "" {
@@ -247,7 +263,7 @@ func hostContainerFrom(claim domain.ContainerClaim, record domain.DiscoveredCont
 	if now.After(silentFrom) {
 		silent = int64(now.Sub(silentFrom).Seconds())
 	}
-	return domain.HostContainer{
+	item := domain.HostContainer{
 		ContainerID: claim.ContainerID, Name: claim.Name, Image: claim.Image, State: claim.State,
 		CPUIds: claim.CPUIds, GPUUUIDs: claim.GPUUUIDs, CPUUnbounded: claim.CPUUnbounded, GPUUnbounded: claim.GPUUnbounded,
 		Training:         len(claim.TrainingGPUUUIDs) > 0 && claimLive(claim.State),
@@ -255,7 +271,14 @@ func hostContainerFrom(claim domain.ContainerClaim, record domain.DiscoveredCont
 		DockerHealth:     claim.DockerHealth, CPUActivity: claim.CPUActivity, GPUActivity: claim.GPUActivity, OOMUnder: claim.OOMUnder,
 		Priority: priority, PriorityLocked: record.PriorityLocked,
 		LastTrainingAt: record.LastTrainingAt, FirstSeenAt: firstSeen, SilentSeconds: silent,
+		ManagedJobID: claim.ManagedJobID, JobName: job.Name,
 	}
+	if job.ID != "" {
+		item.Priority = job.Priority
+		item.PriorityLocked = false
+		item.SilentSeconds = 0
+	}
+	return item
 }
 
 func claimLive(state string) bool {

@@ -323,6 +323,8 @@ type HostContainer struct {
 	CPUActivity      bool        `json:"cpuActivity"`
 	GPUActivity      bool        `json:"gpuActivity"`
 	OOMUnder         bool        `json:"oomUnder"`
+	ManagedJobID     string      `json:"managedJobId,omitempty"`
+	JobName          string      `json:"jobName,omitempty"`
 	Priority         Priority    `json:"priority"`
 	PriorityLocked   bool        `json:"priorityLocked"`
 	LastTrainingAt   *time.Time  `json:"lastTrainingAt,omitempty"`
