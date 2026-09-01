@@ -24,7 +24,7 @@ const WRITE_ARG: Record<string, string> = {
 
 const IGNORE_ARG = new Set([
   '--gpus', '--runtime', '--cpuset-cpus', '--cpuset-mems', '--cpus', '--cpu-shares',
-  '--name', '--restart', '--label',
+  '--network', '--net', '--name', '--restart', '--label',
 ])
 
 const IGNORE_BOOL = new Set([
@@ -273,7 +273,7 @@ export function parseDockerRun(input: string): DockerRunParse {
       rejected.push(flag)
       continue
     }
-    if (flag === '--pid' || flag === '--network' || flag === '--ipc' || flag === '--net') {
+    if (flag === '--pid' || flag === '--ipc') {
       const got = take(i, inline)
       if (!got) {
         unknown.push(flag)

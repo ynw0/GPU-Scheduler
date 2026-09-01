@@ -94,7 +94,7 @@ export function JobImageFields({
     if (result.memoryGB) onMemory(result.memoryGB)
     const applied = filledImage ? result.applied : result.applied.filter((item) => item !== '镜像')
     if (applied.length) notes.push(`已填写：${applied.join('、')}`)
-    if (result.ignored.length) notes.push(`已忽略（以本页 CPU/GPU 设置为准）：${result.ignored.join('、')}`)
+    if (result.ignored.length) notes.push(`已忽略（CPU/GPU/网络以本页和调度器为准）：${result.ignored.join('、')}`)
     if (result.unknown.length) notes.push(`未识别、未采用：${result.unknown.join('、')}`)
     setParseError('')
     setParseNotes(notes)
@@ -104,7 +104,7 @@ export function JobImageFields({
     <>
       <label>
         从 docker run 填入
-        <small>只用来识别填写下面的字段，不会执行这条命令。CPU / GPU 始终以本页资源设置为准。</small>
+        <small>只用来识别填写下面的字段，不会执行这条命令。CPU / GPU / 网络始终以本页和调度器为准。</small>
         <textarea value={dockerRun} onChange={(event) => setDockerRun(event.target.value)} rows={5} placeholder="docker run --rm -e FOO=1 -v /mnt/disk/exp:/data image:tag python train.py" />
       </label>
       <button type="button" className="secondary-action" onClick={fillFromDockerRun}>识别填写</button>
