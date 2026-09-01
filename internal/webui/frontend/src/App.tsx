@@ -121,7 +121,7 @@ export function App() {
           <button className={notifyOpen ? 'rail-item active' : 'rail-item'} title="通知" onClick={() => setNotifyOpen((value) => !value)}>
             <Bell size={19} /><span>通知</span>
           </button>
-          <button className="rail-item" title="设置"><Settings size={19} /><span>设置</span></button>
+          <button className={section === 'admin' ? 'rail-item active' : 'rail-item'} title="设置" onClick={() => setSection('admin')}><Settings size={19} /><span>设置</span></button>
           <div className="avatar" title={`${me.data.username} · ${me.data.role}`}>{me.data.username.slice(0, 2).toUpperCase()}</div>
         </div>
       </aside>
@@ -160,6 +160,12 @@ export function App() {
           <div className="offline-banner">
             <Zap size={18} />
             <div><strong>拓扑发现失败</strong><span>{topology.error instanceof Error ? topology.error.message : '无法读取 CPU / GPU / NUMA 拓扑。'}</span></div>
+          </div>
+        )}
+        {!isOffline && availability.isError && (
+          <div className="offline-banner">
+            <Zap size={18} />
+            <div><strong>可用资源读取失败</strong><span>{availability.error instanceof Error ? availability.error.message : '无法计算空闲 CPU / GPU。'}</span></div>
           </div>
         )}
 

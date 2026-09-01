@@ -168,6 +168,14 @@ func (d *LinuxDiscoverer) discoverGPUs(nodes []domain.NUMANode) ([]domain.GPU, e
 		if ret != nvml.SUCCESS {
 			return nil, fmt.Errorf("get GPU %d memory: %s", index, nvml.ErrorString(ret))
 		}
+		utilization, ret := device.GetUtilizationRates()
+		if ret != nvml.SUCCESS {
+			return nil, fmt.Errorf("get GPU %d utilization: %s", index, nvml.ErrorString(ret))
+		}
+		temperature, ret := device.GetTemperature(nvml.TEMPERATURE_GPU)
+		if ret != nvml.SUCCESS {
+			return nil, fmt.Errorf("get GPU %d temperature: %s", index, nvml.ErrorString(ret))
+		}
 		pciBusID := fmt.Sprintf("%04x:%02x:%02x.0", pci.Domain, pci.Bus, pci.Device)
 		numaNode, err := d.gpuNUMANode(pciBusID, nodes)
 		if err != nil {
@@ -175,7 +183,8 @@ func (d *LinuxDiscoverer) discoverGPUs(nodes []domain.NUMANode) ([]domain.GPU, e
 		}
 		gpus = append(gpus, domain.GPU{
 			UUID: uuid, Index: index, Name: name, PCIBusID: pciBusID, NUMANode: numaNode,
-			MemoryBytes: memory.Total, Healthy: true,
+			MemoryBytes: memory.Total, MemoryUsedBytes: memory.Used, Utilization: utilization.Gpu,
+			TemperatureCelsius: temperature, Healthy: true,
 		})
 	}
 	return gpus, nil

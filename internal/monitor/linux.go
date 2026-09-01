@@ -226,26 +226,15 @@ func (c *LinuxCollector) HostOccupiedGPUs() ([]string, error) {
 		}
 		processes, ret := device.GetComputeRunningProcesses()
 		if ret != nvml.SUCCESS {
-			continue
+			return nil, fmt.Errorf("GPU %d processes: %s", index, nvml.ErrorString(ret))
 		}
 		for _, process := range processes {
 			if process.Pid == 0 {
 				continue
 			}
-			if !pidInContainer(int(process.Pid)) {
-				occupied = append(occupied, uuid)
-				break
-			}
+			occupied = append(occupied, uuid)
+			break
 		}
 	}
 	return occupied, nil
-}
-
-func pidInContainer(pid int) bool {
-	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/cgroup", pid))
-	if err != nil {
-		return false
-	}
-	text := string(data)
-	return strings.Contains(text, "docker") || strings.Contains(text, "containerd") || strings.Contains(text, "libpod")
 }

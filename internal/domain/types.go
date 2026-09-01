@@ -85,13 +85,16 @@ type NUMANode struct {
 }
 
 type GPU struct {
-	UUID        string `json:"uuid"`
-	Index       int    `json:"index"`
-	Name        string `json:"name"`
-	PCIBusID    string `json:"pciBusId"`
-	NUMANode    int    `json:"numaNode"`
-	MemoryBytes uint64 `json:"memoryBytes"`
-	Healthy     bool   `json:"healthy"`
+	UUID               string `json:"uuid"`
+	Index              int    `json:"index"`
+	Name               string `json:"name"`
+	PCIBusID           string `json:"pciBusId"`
+	NUMANode           int    `json:"numaNode"`
+	MemoryBytes        uint64 `json:"memoryBytes"`
+	MemoryUsedBytes    uint64 `json:"memoryUsedBytes"`
+	Utilization        uint32 `json:"utilization"`
+	TemperatureCelsius uint32 `json:"temperatureCelsius"`
+	Healthy            bool   `json:"healthy"`
 }
 
 type ImageInfo struct {

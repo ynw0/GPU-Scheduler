@@ -261,18 +261,10 @@ func (s *Server) currentAvailability(ctx context.Context) (domain.Topology, doma
 		if !slices.Contains([]string{"running", "created", "restarting", "paused"}, strings.ToLower(claim.State)) {
 			continue
 		}
-		if claim.CPUUnbounded {
-			for _, cpu := range topology.CPUs {
-				blockedCPU = append(blockedCPU, cpu.ID)
-			}
-		} else {
+		if !claim.CPUUnbounded {
 			blockedCPU = append(blockedCPU, claim.CPUIds...)
 		}
-		if claim.GPUUnbounded {
-			for _, gpu := range topology.GPUs {
-				blockedGPU = append(blockedGPU, gpu.UUID)
-			}
-		} else {
+		if !claim.GPUUnbounded {
 			blockedGPU = append(blockedGPU, claim.GPUUUIDs...)
 		}
 	}
