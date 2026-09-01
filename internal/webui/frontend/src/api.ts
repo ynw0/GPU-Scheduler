@@ -12,13 +12,23 @@ function csrfToken(): string {
   return item ? decodeURIComponent(item.split('=')[1]) : ''
 }
 
+async function problem(response: Response): Promise<APIError> {
+  const text = await response.text()
+  try {
+    const body = JSON.parse(text) as { detail?: string; title?: string }
+    return new APIError(response.status, body.detail || body.title || text)
+  } catch {
+    return new APIError(response.status, text || `${response.status} ${response.statusText}`)
+  }
+}
+
 async function mutate<T>(path: string, method: string, value?: unknown, headers?: Record<string, string>): Promise<T> {
   const response = await fetch(`/api/v1${path}`, {
     method, credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken(), ...headers },
     body: value === undefined ? undefined : JSON.stringify(value),
   })
-  if (!response.ok) throw new APIError(response.status, await response.text())
+  if (!response.ok) throw await problem(response)
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
 }
@@ -28,10 +38,7 @@ async function request<T>(path: string): Promise<T> {
     credentials: 'same-origin',
     headers: { Accept: 'application/json' },
   })
-  if (!response.ok) {
-    const detail = await response.text()
-    throw new APIError(response.status, detail || `${response.status} ${response.statusText}`)
-  }
+  if (!response.ok) throw await problem(response)
   return response.json() as Promise<T>
 }
 
@@ -42,14 +49,14 @@ export const api = {
       method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     })
-    if (!response.ok) throw new APIError(response.status, await response.text())
+    if (!response.ok) throw await problem(response)
     return response.json() as Promise<User>
   },
   logout: async () => {
     const response = await fetch('/api/v1/auth/logout', {
       method: 'POST', credentials: 'same-origin', headers: { 'X-CSRF-Token': csrfToken() },
     })
-    if (!response.ok) throw new APIError(response.status, await response.text())
+    if (!response.ok) throw await problem(response)
   },
   health: () => request<Health>('/health'),
   topology: () => request<Topology>('/topology'),
@@ -75,6 +82,9 @@ export const api = {
   hostContainers: () => request<HostContainer[]>('/unmanaged-containers'),
   patchHostContainer: (id: string, priority: Job['priority']) => mutate<void>(`/unmanaged-containers/${id}`, 'PATCH', { priority }),
   stopHostContainer: (id: string) => mutate<void>(`/unmanaged-containers/${id}/stop`, 'POST'),
+  pauseHostContainer: (id: string) => mutate<void>(`/unmanaged-containers/${id}/pause`, 'POST'),
+  unpauseHostContainer: (id: string) => mutate<void>(`/unmanaged-containers/${id}/unpause`, 'POST'),
+  changePassword: (currentPassword: string, newPassword: string) => mutate<void>('/me/password', 'POST', { currentPassword, newPassword }),
   createTeam: (name: string) => mutate<Team>('/teams', 'POST', { name }),
   createUser: (value: { username: string; password: string; role: User['role']; email?: string; teamId?: string }) => mutate<User>('/users', 'POST', value),
   upsertQuota: (value: Quota) => mutate<Quota>('/quotas', 'POST', value),

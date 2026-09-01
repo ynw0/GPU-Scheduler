@@ -48,6 +48,23 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/User" }
+  /me/password:
+    post:
+      operationId: changeOwnPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { type: string, minLength: 12 }
+      responses:
+        "204": { description: Password updated }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationError" }
   /topology:
     get:
       operationId: getTopology
@@ -88,6 +105,27 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/UnmanagedContainer" }
+  /unmanaged-containers/{id}/stop:
+    post:
+      operationId: stopUnmanagedContainer
+      parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+      responses:
+        "204": { description: Stopped }
+        "409": { description: Managed container }
+  /unmanaged-containers/{id}/pause:
+    post:
+      operationId: pauseUnmanagedContainer
+      parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+      responses:
+        "204": { description: Paused }
+        "409": { description: Managed container }
+  /unmanaged-containers/{id}/unpause:
+    post:
+      operationId: unpauseUnmanagedContainer
+      parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+      responses:
+        "204": { description: Resumed }
+        "409": { description: Managed container }
   /job-plans:
     post:
       operationId: planJob
@@ -426,13 +464,36 @@ components:
         numaPolicy: { const: strict }
     ImageWorkload:
       type: object
-      required: [kind, image, command]
+      required: [kind, image]
       properties:
         kind: { const: image }
         image: { type: string }
         command: { type: array, items: { type: string } }
         entrypoint: { type: array, items: { type: string } }
         workingDirectory: { type: string }
+        environment:
+          type: object
+          additionalProperties: { type: string }
+        mounts:
+          type: array
+          items:
+            type: object
+            required: [source, target]
+            properties:
+              source: { type: string }
+              target: { type: string }
+              readOnly: { type: boolean }
+        user: { type: string }
+        shmSizeBytes: { type: integer, minimum: 1 }
+        publishedPorts:
+          type: array
+          items:
+            type: object
+            required: [hostPort, containerPort]
+            properties:
+              hostPort: { type: integer, minimum: 1, maximum: 65535 }
+              containerPort: { type: integer, minimum: 1, maximum: 65535 }
+              protocol: { type: string, enum: [tcp, udp, sctp], default: tcp }
     ComposeWorkload:
       type: object
       required: [kind, composeSourceId, services]

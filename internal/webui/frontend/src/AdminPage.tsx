@@ -15,6 +15,7 @@ export function AdminPage({ role }: { role: User['role'] }) {
   const topology = useQuery({ queryKey: ['topology'], queryFn: api.topology, enabled: role === 'Admin' && tab === 'pools' })
   const audit = useQuery({ queryKey: ['audit'], queryFn: api.auditEvents, enabled: role === 'Admin' || role === 'Auditor' })
   const [userForm, setUserForm] = useState({ username: '', password: '', role: 'User' as User['role'], teamId: '' })
+  const [userCreated, setUserCreated] = useState('')
   const [teamName, setTeamName] = useState('')
   const [sourceForm, setSourceForm] = useState({ name: '', rootPath: '', entryFile: 'compose.yaml' })
   const [quotaForm, setQuotaForm] = useState({ scopeType: 'user' as 'user' | 'team', scopeId: '', gpuLimit: 4, cpuThreadLimit: 32, memoryBytesLimit: 256 * 1024 ** 3 })
@@ -24,8 +25,19 @@ export function AdminPage({ role }: { role: User['role'] }) {
   const [poolCPUs, setPoolCPUs] = useState<number[]>([])
 
   const createUser = useMutation({
-    mutationFn: () => api.createUser(userForm),
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['users'] }); setUserForm({ username: '', password: '', role: 'User', teamId: '' }) },
+    mutationFn: () => {
+      const payload: { username: string; password: string; role: User['role']; teamId?: string } = {
+        username: userForm.username, password: userForm.password, role: userForm.role,
+      }
+      if (userForm.teamId) payload.teamId = userForm.teamId
+      return api.createUser(payload)
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['users'] })
+      setUserCreated(`用户 ${userForm.username} 已创建`)
+      setUserForm({ username: '', password: '', role: 'User', teamId: '' })
+    },
+    onMutate: () => setUserCreated(''),
   })
   const createTeam = useMutation({
     mutationFn: () => api.createTeam(teamName),
@@ -89,17 +101,32 @@ export function AdminPage({ role }: { role: User['role'] }) {
         <div className="admin-grid">
           <form className="admin-form" onSubmit={(event) => { event.preventDefault(); createUser.mutate() }}>
             <label>用户名<input value={userForm.username} onChange={(event) => setUserForm({ ...userForm, username: event.target.value })} /></label>
-            <label>密码<input type="password" value={userForm.password} onChange={(event) => setUserForm({ ...userForm, password: event.target.value })} /></label>
+            <label>
+              密码
+              <input type="password" value={userForm.password} onChange={(event) => setUserForm({ ...userForm, password: event.target.value })} />
+              <small className="field-hint">密码不少于配置下限（至少 12 位）</small>
+            </label>
             <label>角色<select value={userForm.role} onChange={(event) => setUserForm({ ...userForm, role: event.target.value as User['role'] })}>
               <option>User</option><option>TeamOperator</option><option>Admin</option><option>Viewer</option><option>Auditor</option>
             </select></label>
-            <label>团队 ID<input value={userForm.teamId} onChange={(event) => setUserForm({ ...userForm, teamId: event.target.value })} /></label>
-            <button className="primary-action" type="submit" disabled={createUser.isPending || !userForm.username || userForm.password.length < 12}>创建用户</button>
+            <label>团队<select value={userForm.teamId} onChange={(event) => setUserForm({ ...userForm, teamId: event.target.value })}>
+              <option value="">无团队</option>
+              {(teams.data ?? []).map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+            </select></label>
+            <button className="primary-action" type="submit" disabled={createUser.isPending || !userForm.username.trim() || !userForm.password}>
+              {createUser.isPending ? '正在创建…' : '创建用户'}
+            </button>
+            {userCreated && <div className="plan-status ok">{userCreated}</div>}
             {createUser.error && <div className="plan-conflict">{String(createUser.error.message)}</div>}
           </form>
           <div className="full-job-table">
             {(users.data ?? []).map((user) => (
-              <div className="full-job-row" key={user.id}><span>{user.username}</span><span>{user.role}</span><span className="muted">{user.teamId || '—'}</span><span className="muted">{user.disabled ? '已停用' : '启用'}</span></div>
+              <div className="full-job-row" key={user.id}>
+                <span>{user.username}</span>
+                <span>{user.role}</span>
+                <span className="muted">{(teams.data ?? []).find((team) => team.id === user.teamId)?.name || user.teamId || '—'}</span>
+                <span className="muted">{user.disabled ? '已停用' : '启用'}</span>
+              </div>
             ))}
           </div>
         </div>

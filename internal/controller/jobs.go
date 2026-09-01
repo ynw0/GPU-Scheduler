@@ -318,6 +318,24 @@ func validateJobSpec(spec domain.JobSpec, identity auth.Identity) error {
 	if spec.Workload.Image == "" {
 		return errors.New("Image 不能为空")
 	}
+	for _, item := range spec.Workload.Mounts {
+		if strings.TrimSpace(item.Source) == "" || strings.TrimSpace(item.Target) == "" {
+			return errors.New("挂载需要宿主机路径和容器路径")
+		}
+	}
+	for _, item := range spec.Workload.PublishedPorts {
+		if item.HostPort == 0 || item.ContainerPort == 0 {
+			return errors.New("端口映射的宿主机端口和容器端口必须大于 0")
+		}
+		if item.Protocol != "" && !slices.Contains([]string{"tcp", "udp", "sctp"}, strings.ToLower(item.Protocol)) {
+			return errors.New("端口协议只支持 tcp、udp 或 sctp")
+		}
+	}
+	for key := range spec.Workload.Environment {
+		if strings.TrimSpace(key) == "" {
+			return errors.New("环境变量名不能为空")
+		}
+	}
 	return nil
 }
 

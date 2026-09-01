@@ -69,6 +69,21 @@ function Tip({ label, detail }: { label: string; detail: string }) {
   )
 }
 
+function containerStatus(item: HostContainer): { label: string; kind: string } {
+  const state = (item.state || '').toLowerCase()
+  if (state === 'paused') return { label: '已暂停', kind: 'paused' }
+  if (state === 'exited' || state === 'dead' || state === 'removing') return { label: '已退出', kind: 'exited' }
+  if (item.dockerHealth === 'unhealthy' || item.oomUnder) return { label: '不健康', kind: 'unhealthy' }
+  if (state === 'running') return item.training ? { label: '训练中', kind: 'training' } : { label: '空闲', kind: 'idle' }
+  const labels: Record<string, string> = { created: '已创建', restarting: '重启中' }
+  return { label: labels[state] ?? (item.state || '未知'), kind: 'other' }
+}
+
+function Status({ item }: { item: HostContainer }) {
+  const status = containerStatus(item)
+  return <span className={`host-status ${status.kind}`}>{status.label}</span>
+}
+
 function Occupancy({ item, gpus }: { item: HostContainer; gpus: GPU[] }) {
   const live = item.state === 'running' || item.state === 'paused'
   const ids = item.cpuIds ?? []
@@ -115,16 +130,25 @@ function ContainerName({ item }: { item: HostContainer }) {
   )
 }
 
-export function HostContainersPage({ role, gpus = [] }: { role: User['role']; gpus?: GPU[] }) {
+export function HostContainersPage({ role, gpus = [], onOpenJob }: { role: User['role']; gpus?: GPU[]; onOpenJob: (id: string) => void }) {
   const queryClient = useQueryClient()
   const items = useQuery({ queryKey: ['host-containers'], queryFn: api.hostContainers, refetchInterval: 10_000 })
+  const refresh = () => { void queryClient.invalidateQueries({ queryKey: ['host-containers'] }) }
   const patch = useMutation({
     mutationFn: ({ id, priority }: { id: string; priority: HostContainer['priority'] }) => api.patchHostContainer(id, priority),
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['host-containers'] }) },
+    onSuccess: refresh,
   })
   const stop = useMutation({
     mutationFn: (id: string) => api.stopHostContainer(id),
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['host-containers'] }) },
+    onSuccess: refresh,
+  })
+  const pause = useMutation({
+    mutationFn: (id: string) => api.pauseHostContainer(id),
+    onSuccess: refresh,
+  })
+  const unpause = useMutation({
+    mutationFn: (id: string) => api.unpauseHostContainer(id),
+    onSuccess: refresh,
   })
   const admin = role === 'Admin'
   const rows = items.data ?? []
@@ -146,7 +170,7 @@ export function HostContainersPage({ role, gpus = [] }: { role: User['role']; gp
         </div>
         <div className="full-job-table">
           <div className="host-row internal header">
-            <span>容器</span><span>CPU 设置</span><span>GPU 设置</span><span>当前占用</span><span>任务</span><span>状态</span>
+            <span>容器</span><span>CPU 设置</span><span>GPU 设置</span><span>当前占用</span><span>状态</span><span>任务</span>
           </div>
           {internal.map((item) => {
             const cpu = cpuSetting(item)
@@ -157,8 +181,10 @@ export function HostContainersPage({ role, gpus = [] }: { role: User['role']; gp
                 <Tip label={cpu.label} detail={cpu.detail} />
                 <Tip label={gpu.label} detail={gpu.detail} />
                 <Occupancy item={item} gpus={gpus} />
-                <span>{item.jobName || item.managedJobId?.slice(0, 8)}</span>
-                <span>{item.state}</span>
+                <Status item={item} />
+                {item.managedJobId ? (
+                  <button className="text-button" onClick={() => onOpenJob(item.managedJobId!)}>{item.jobName || item.managedJobId.slice(0, 8)}</button>
+                ) : <span>—</span>}
               </div>
             )
           })}
@@ -172,7 +198,7 @@ export function HostContainersPage({ role, gpus = [] }: { role: User['role']; gp
         </div>
         <div className="full-job-table">
           <div className="host-row header">
-            <span>容器</span><span>CPU 设置</span><span>GPU 设置</span><span>当前占用</span><span>优先级</span><span>静默</span><span>操作</span>
+            <span>容器</span><span>CPU 设置</span><span>GPU 设置</span><span>当前占用</span><span>状态</span><span>优先级</span><span>静默</span><span>操作</span>
           </div>
           {external.map((item) => {
             const cpu = cpuSetting(item)
@@ -183,6 +209,7 @@ export function HostContainersPage({ role, gpus = [] }: { role: User['role']; gp
                 <Tip label={cpu.label} detail={cpu.detail} />
                 <Tip label={gpu.label} detail={gpu.detail} />
                 <Occupancy item={item} gpus={gpus} />
+                <Status item={item} />
                 <span>
                   {admin ? (
                     <select
@@ -196,7 +223,13 @@ export function HostContainersPage({ role, gpus = [] }: { role: User['role']; gp
                   {item.priorityLocked ? ' 锁' : ''}
                 </span>
                 <span className="muted">{formatSilent(item.silentSeconds)}</span>
-                <span>
+                <span className="host-actions">
+                  {admin && item.state === 'running' && (
+                    <button className="text-button" onClick={() => pause.mutate(item.containerId)}>暂停</button>
+                  )}
+                  {admin && item.state === 'paused' && (
+                    <button className="text-button" onClick={() => unpause.mutate(item.containerId)}>继续</button>
+                  )}
                   {admin && (item.state === 'running' || item.state === 'paused') && (
                     <button className="text-button" onClick={() => stop.mutate(item.containerId)}>停止</button>
                   )}

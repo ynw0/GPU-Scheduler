@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +17,7 @@ import (
 )
 
 var ErrInvalidCredentials = errors.New("invalid credentials")
+var ErrWrongPassword = errors.New("当前密码不正确")
 
 type Service struct {
 	store       *store.Store
@@ -42,9 +44,13 @@ func NewService(store *store.Store, idleTimeout, absoluteTTL time.Duration, minP
 	return &Service{store: store, idleTimeout: idleTimeout, absoluteTTL: absoluteTTL, minPassword: minPassword}
 }
 
+func (s *Service) passwordTooShort() error {
+	return fmt.Errorf("密码短于配置下限（%d 位）", s.minPassword)
+}
+
 func (s *Service) CreateUser(ctx context.Context, username, email, password string, role domain.Role, teamID string) (Identity, error) {
 	if len(password) < s.minPassword {
-		return Identity{}, errors.New("password is shorter than configured minimum")
+		return Identity{}, s.passwordTooShort()
 	}
 	hash, err := HashPassword(password)
 	if err != nil {
@@ -61,7 +67,7 @@ func (s *Service) CreateUser(ctx context.Context, username, email, password stri
 
 func (s *Service) BootstrapAdmin(ctx context.Context, username, email, password string) error {
 	if len(password) < s.minPassword {
-		return errors.New("password is shorter than configured minimum")
+		return s.passwordTooShort()
 	}
 	hash, err := HashPassword(password)
 	if err != nil {
@@ -129,6 +135,24 @@ func (s *Service) VerifyCSRF(ctx context.Context, sessionToken, csrfToken string
 
 func (s *Service) Logout(ctx context.Context, sessionToken string) error {
 	return s.store.DeleteSession(ctx, hashToken(sessionToken))
+}
+
+func (s *Service) ChangeOwnPassword(ctx context.Context, userID, current, next string) error {
+	if len(next) < s.minPassword {
+		return s.passwordTooShort()
+	}
+	user, err := s.store.FindUserByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if !VerifyPassword(user.PasswordHash, current) {
+		return ErrWrongPassword
+	}
+	hash, err := HashPassword(next)
+	if err != nil {
+		return err
+	}
+	return s.store.UpdatePasswordHash(ctx, userID, hash)
 }
 
 func randomToken(length int) (string, error) {

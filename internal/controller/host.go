@@ -81,17 +81,9 @@ func (s *Server) patchHostContainer(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) stopHostContainer(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	claims, err := s.agent.Claims(r.Context())
-	if err != nil {
-		writeProblem(w, 503, "Containers unavailable", err.Error())
+	id, ok := s.unmanagedContainerID(w, r)
+	if !ok {
 		return
-	}
-	for _, claim := range claims {
-		if claim.ContainerID == id && claim.ManagedJobID != "" {
-			writeProblem(w, 409, "Managed container", "内部容器请从任务详情停止")
-			return
-		}
 	}
 	if err := s.agent.StopContainer(r.Context(), id, 10); err != nil {
 		writeProblem(w, 503, "Stop failed", err.Error())
@@ -99,6 +91,48 @@ func (s *Server) stopHostContainer(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = s.store.InsertAudit(r.Context(), identityFrom(r.Context()).UserID, "host-container.stop", "container", id, "")
 	w.WriteHeader(204)
+}
+
+func (s *Server) pauseHostContainer(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.unmanagedContainerID(w, r)
+	if !ok {
+		return
+	}
+	if err := s.agent.PauseContainer(r.Context(), id); err != nil {
+		writeProblem(w, 503, "Pause failed", err.Error())
+		return
+	}
+	_ = s.store.InsertAudit(r.Context(), identityFrom(r.Context()).UserID, "host-container.pause", "container", id, "")
+	w.WriteHeader(204)
+}
+
+func (s *Server) unpauseHostContainer(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.unmanagedContainerID(w, r)
+	if !ok {
+		return
+	}
+	if err := s.agent.UnpauseContainer(r.Context(), id); err != nil {
+		writeProblem(w, 503, "Unpause failed", err.Error())
+		return
+	}
+	_ = s.store.InsertAudit(r.Context(), identityFrom(r.Context()).UserID, "host-container.unpause", "container", id, "")
+	w.WriteHeader(204)
+}
+
+func (s *Server) unmanagedContainerID(w http.ResponseWriter, r *http.Request) (string, bool) {
+	id := r.PathValue("id")
+	claims, err := s.agent.Claims(r.Context())
+	if err != nil {
+		writeProblem(w, 503, "Containers unavailable", err.Error())
+		return "", false
+	}
+	for _, claim := range claims {
+		if claim.ContainerID == id && claim.ManagedJobID != "" {
+			writeProblem(w, 409, "Managed container", "内部容器请从任务详情停止")
+			return "", false
+		}
+	}
+	return id, true
 }
 
 func (s *Server) syncHostContainers(ctx context.Context, claims []domain.ContainerClaim) {

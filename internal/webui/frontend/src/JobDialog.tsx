@@ -3,12 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, CircleGauge, Cpu, Gauge, HardDrive, LayoutGrid, X } from 'lucide-react'
 import { api } from './api'
 import { cpuSelectable, selectedGPUNuma } from './numa'
-import type { JobPlan, JobSpec, ResourceRequest, Topology } from './types'
-
-function formatBytes(value = 0): string {
-  if (!value) return '0 GB'
-  return `${(value / 1024 ** 3).toFixed(value >= 1024 ** 4 ? 0 : 1)} GB`
-}
+import { emptyImageFields, JobImageFields, parseEnvironment, type ImageFields } from './JobImageFields'
+import type { ImageWorkload, JobPlan, JobSpec, ResourceRequest, Topology } from './types'
 
 function emptyResources(): ResourceRequest {
   return { cpuMode: 'auto-cores', cpuCount: 8, gpuMode: 'auto', gpuCount: 1, memoryBytes: 64 * 1024 ** 3, numaPolicy: 'strict' }
@@ -20,9 +16,7 @@ export function NewJobDialog({ topology, onClose }: { topology?: Topology; onClo
   const sources = useQuery({ queryKey: ['compose-sources'], queryFn: api.composeSources, refetchInterval: false })
   const [kind, setKind] = useState<'image' | 'compose'>('image')
   const [name, setName] = useState('')
-  const [image, setImage] = useState('')
-  const [command, setCommand] = useState('python\ntrain.py')
-  const [workingDirectory, setWorkingDirectory] = useState('/workspace')
+  const [imageFields, setImageFields] = useState<ImageFields>(emptyImageFields())
   const [composeSourceId, setComposeSourceId] = useState('')
   const [composeInput, setComposeInput] = useState<'catalog' | 'path' | 'upload'>('catalog')
   const [composePath, setComposePath] = useState('')
@@ -48,13 +42,32 @@ export function NewJobDialog({ topology, onClose }: { topology?: Topology; onClo
     memoryBytes: memoryGB * 1024 ** 3, numaPolicy: 'strict',
   })
 
+  const imageWorkload = (): ImageWorkload => {
+    const command = imageFields.command.split('\n').map((item) => item.trim()).filter(Boolean)
+    const entrypoint = imageFields.entrypoint.split('\n').map((item) => item.trim()).filter(Boolean)
+    const environment = parseEnvironment(imageFields.environment)
+    const mounts = imageFields.mounts.filter((item) => item.source.trim() && item.target.trim()).map((item) => ({
+      source: item.source.trim(), target: item.target.trim(), readOnly: Boolean(item.readOnly),
+    }))
+    const publishedPorts = imageFields.ports.filter((item) => item.hostPort > 0 && item.containerPort > 0)
+    const shmMB = Number(imageFields.shmMB)
+    return {
+      kind: 'image',
+      image: imageFields.image,
+      ...(command.length ? { command } : {}),
+      ...(entrypoint.length ? { entrypoint } : {}),
+      ...(imageFields.workingDirectory.trim() ? { workingDirectory: imageFields.workingDirectory.trim() } : {}),
+      ...(Object.keys(environment).length ? { environment } : {}),
+      ...(mounts.length ? { mounts } : {}),
+      ...(publishedPorts.length ? { publishedPorts } : {}),
+      ...(shmMB > 0 ? { shmSizeBytes: shmMB * 1024 * 1024 } : {}),
+      ...(imageFields.user.trim() ? { user: imageFields.user.trim() } : {}),
+    }
+  }
+
   const buildSpec = (): JobSpec => ({
     name, priority,
-    workload: kind === 'image' ? {
-      kind: 'image', image,
-      command: command.split('\n').map((item) => item.trim()).filter(Boolean),
-      workingDirectory,
-    } : {
+    workload: kind === 'image' ? imageWorkload() : {
       kind: 'compose', composeSourceId,
       services: [{ name: serviceName, class: 'training', resources: resources() }],
     },
@@ -121,7 +134,7 @@ export function NewJobDialog({ topology, onClose }: { topology?: Topology; onClo
   }
   const toggleCPU = (id: number) => setSelectedCPUs((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
   const composeReady = composeInput === 'catalog' ? composeSourceId : composeInput === 'path' ? composePath.trim() : composeContent.trim()
-  const ready = name.trim() && (kind === 'image' ? image && command.trim() : composeReady && serviceName.trim()) && memoryGB > 0
+  const ready = name.trim() && (kind === 'image' ? imageFields.image && memoryGB > 0 : composeReady && serviceName.trim() && memoryGB > 0)
   const planCurrent = planKey === fingerprint()
   const allowedNuma = gpuMode === 'manual' ? selectedGPUNuma(topology, selectedGPUs) : new Set<number>()
 
@@ -147,14 +160,15 @@ export function NewJobDialog({ topology, onClose }: { topology?: Topology; onClo
                 <label>任务名称<input value={name} onChange={(event) => setName(event.target.value)} placeholder="experiment-a800-01" /></label>
                 <label>优先级<select value={priority} onChange={(event) => setPriority(event.target.value as JobSpec['priority'])}><option>P2</option><option>P3</option><option>P1</option><option>P0</option></select></label>
               </div>
-              {kind === 'image' ? <>
-                <label>本机镜像<select value={image} onChange={(event) => setImage(event.target.value)}><option value="">选择 Docker Image</option>{(images.data ?? []).map((item) => <option key={`${item.id}-${item.tag}`} value={`${item.repository}:${item.tag}`}>{item.repository}:{item.tag} · {formatBytes(item.sizeBytes)}</option>)}</select></label>
-                <div className="field-grid two">
-                  <label>工作目录<input value={workingDirectory} onChange={(event) => setWorkingDirectory(event.target.value)} /></label>
-                  <label>内存限制（GB）<input type="number" min={1} value={memoryGB} onChange={(event) => setMemoryGB(Number(event.target.value))} /></label>
-                </div>
-                <label>启动 argv <small>每行一个参数，不经过 Shell</small><textarea value={command} onChange={(event) => setCommand(event.target.value)} rows={4} /></label>
-              </> : <>
+              {kind === 'image' ? (
+                <JobImageFields
+                  images={images.data ?? []}
+                  value={imageFields}
+                  memoryGB={memoryGB}
+                  onChange={(next) => { setImageFields(next); setPlan(undefined) }}
+                  onMemory={(gb) => { setMemoryGB(gb); setPlan(undefined) }}
+                />
+              ) : <>
                 <div className="mode-switch">
                   <button className={composeInput === 'catalog' ? 'active' : ''} onClick={() => { setComposeInput('catalog'); setComposeSourceId(''); setPlan(undefined) }}>已登记</button>
                   <button className={composeInput === 'path' ? 'active' : ''} onClick={() => { setComposeInput('path'); setComposeSourceId(''); setPlan(undefined) }}>本机路径</button>

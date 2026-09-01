@@ -75,6 +75,18 @@ func (c *Client) StopContainer(ctx context.Context, containerID string, timeoutS
 	}, nil)
 }
 
+func (c *Client) PauseContainer(ctx context.Context, containerID string) error {
+	return c.postJSON(ctx, c.longClient, "/internal/v1/containers/pause", map[string]any{
+		"containerId": containerID,
+	}, nil)
+}
+
+func (c *Client) UnpauseContainer(ctx context.Context, containerID string) error {
+	return c.postJSON(ctx, c.longClient, "/internal/v1/containers/unpause", map[string]any{
+		"containerId": containerID,
+	}, nil)
+}
+
 func (c *Client) HostGPUProcesses(ctx context.Context) ([]string, error) {
 	var result []string
 	if err := c.getJSON(ctx, "/internal/v1/gpu-host-processes", &result); err != nil {

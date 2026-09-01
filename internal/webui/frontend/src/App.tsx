@@ -25,6 +25,7 @@ import { AdminPage } from './AdminPage'
 import { HostContainersPage } from './HostContainers'
 import { JobDetail } from './JobDetail'
 import { NewJobDialog } from './JobDialog'
+import { AccountMenu } from './AccountMenu'
 import type { GPU, Job, LogicalCPU, NUMANode, Topology } from './types'
 
 type Section = 'overview' | 'jobs' | 'host' | 'queue' | 'templates' | 'admin'
@@ -123,7 +124,7 @@ export function App() {
           <button className={notifyOpen ? 'rail-item active' : 'rail-item'} title="通知" onClick={() => setNotifyOpen((value) => !value)}>
             <Bell size={19} /><span>通知</span>
           </button>
-          <div className="avatar" title={`${me.data.username} · ${me.data.role}`}>{me.data.username.slice(0, 2).toUpperCase()}</div>
+          <AccountMenu user={me.data} />
         </div>
       </aside>
 
@@ -417,7 +418,7 @@ function SectionContent({
   onAction: (id: string, name: 'start' | 'stop' | 'cancel' | 'retry') => void
 }) {
   if (section === 'admin') return <AdminPage role={role} />
-  if (section === 'host') return <HostContainersPage role={role} gpus={gpus} />
+  if (section === 'host') return <HostContainersPage role={role} gpus={gpus} onOpenJob={onOpenJob} />
   if (section === 'templates') {
     return (
       <section className="workload-page overview-enter">

@@ -133,11 +133,29 @@ export interface JobSpec {
   stopGraceSeconds: number
 }
 
+export interface Mount {
+  source: string
+  target: string
+  readOnly?: boolean
+}
+
+export interface PortPublish {
+  hostPort: number
+  containerPort: number
+  protocol?: string
+}
+
 export interface ImageWorkload {
   kind: 'image'
   image: string
-  command: string[]
+  command?: string[]
+  entrypoint?: string[]
   workingDirectory?: string
+  environment?: Record<string, string>
+  mounts?: Mount[]
+  user?: string
+  shmSizeBytes?: number
+  publishedPorts?: PortPublish[]
 }
 
 export interface ComposeWorkload {

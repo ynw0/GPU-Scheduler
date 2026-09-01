@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
+	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 
 	"gpu-scheduler/internal/dockerhost"
@@ -88,14 +90,28 @@ func (d *Docker) CreateImage(ctx context.Context, request ImageCreateRequest) (R
 			Type: mount.TypeBind, Source: request.HeartbeatDir, Target: heartbeat.ContainerDir, ReadOnly: true,
 		})
 	}
+	command := request.Workload.Command
+	if len(command) == 0 {
+		command = nil
+	}
+	entrypoint := request.Workload.Entrypoint
+	if len(entrypoint) == 0 {
+		entrypoint = nil
+	}
+	exposed, bindings, err := publishedPorts(request.Workload.PublishedPorts)
+	if err != nil {
+		return RuntimeRef{}, err
+	}
 	hostConfig := &container.HostConfig{
 		Resources: container.Resources{
 			CpusetCpus: inventory.FormatCPUList(request.Plan.CPUIds),
 			CpusetMems: inventory.FormatCPUList(request.Plan.NUMANodes),
 			Memory:     int64(request.Plan.MemoryBytes),
 		},
-		Mounts: mounts,
-		Init:   &initProcess,
+		Mounts:       mounts,
+		Init:         &initProcess,
+		PortBindings: bindings,
+		ShmSize:      int64(request.Workload.ShmSizeBytes),
 	}
 	if len(request.Plan.GPUUUIDs) > 0 {
 		hostConfig.DeviceRequests = []container.DeviceRequest{{
@@ -105,9 +121,9 @@ func (d *Docker) CreateImage(ctx context.Context, request ImageCreateRequest) (R
 	response, err := d.client.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Name: request.Name,
 		Config: &container.Config{
-			Image: request.Workload.Image, Cmd: request.Workload.Command,
-			Entrypoint: request.Workload.Entrypoint, WorkingDir: request.Workload.WorkingDirectory,
-			Env:    environment,
+			Image: request.Workload.Image, Cmd: command, Entrypoint: entrypoint,
+			WorkingDir: request.Workload.WorkingDirectory, User: request.Workload.User,
+			Env: environment, ExposedPorts: exposed,
 			Labels: map[string]string{LabelManaged: "true", LabelJobID: request.JobID, LabelAttemptID: request.AttemptID},
 		},
 		HostConfig: hostConfig,
@@ -145,6 +161,16 @@ func (d *Docker) Stop(ctx context.Context, ref RuntimeRef, timeoutSeconds int) e
 		}
 	}
 	return nil
+}
+
+func (d *Docker) Pause(ctx context.Context, containerID string) error {
+	_, err := d.client.ContainerPause(ctx, containerID, client.ContainerPauseOptions{})
+	return err
+}
+
+func (d *Docker) Unpause(ctx context.Context, containerID string) error {
+	_, err := d.client.ContainerUnpause(ctx, containerID, client.ContainerUnpauseOptions{})
+	return err
 }
 
 func (d *Docker) RemoveAttempt(ctx context.Context, attemptID string) error {
@@ -321,4 +347,25 @@ func (d *Docker) verifyResources(ctx context.Context, containerID string, plan S
 		}
 	}
 	return nil
+}
+
+func publishedPorts(ports []domain.PortPublish) (network.PortSet, network.PortMap, error) {
+	if len(ports) == 0 {
+		return nil, nil, nil
+	}
+	exposed := network.PortSet{}
+	bindings := network.PortMap{}
+	for _, item := range ports {
+		proto := network.TCP
+		if item.Protocol != "" {
+			proto = network.IPProtocol(strings.ToLower(item.Protocol))
+		}
+		port, ok := network.PortFrom(item.ContainerPort, proto)
+		if !ok {
+			return nil, nil, fmt.Errorf("invalid published port %d/%s", item.ContainerPort, proto)
+		}
+		exposed[port] = struct{}{}
+		bindings[port] = []network.PortBinding{{HostPort: strconv.FormatUint(uint64(item.HostPort), 10)}}
+	}
+	return exposed, bindings, nil
 }

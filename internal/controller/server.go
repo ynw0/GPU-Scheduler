@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -53,12 +54,15 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/v1/auth/login", s.login)
 	s.mux.Handle("POST /api/v1/auth/logout", s.protected(http.HandlerFunc(s.logout), true))
 	s.mux.Handle("GET /api/v1/me", s.protected(http.HandlerFunc(s.me), false))
+	s.mux.Handle("POST /api/v1/me/password", s.protected(http.HandlerFunc(s.changePassword), true))
 	s.mux.Handle("GET /api/v1/topology", s.protected(http.HandlerFunc(s.getTopology), false))
 	s.mux.Handle("GET /api/v1/resources/availability", s.protected(http.HandlerFunc(s.getAvailability), false))
 	s.mux.Handle("GET /api/v1/images", s.protected(http.HandlerFunc(s.getImages), false))
 	s.mux.Handle("GET /api/v1/unmanaged-containers", s.protected(http.HandlerFunc(s.getUnmanaged), false))
 	s.mux.Handle("PATCH /api/v1/unmanaged-containers/{id}", s.protected(s.requireAdmin(s.patchHostContainer), true))
 	s.mux.Handle("POST /api/v1/unmanaged-containers/{id}/stop", s.protected(s.requireAdmin(s.stopHostContainer), true))
+	s.mux.Handle("POST /api/v1/unmanaged-containers/{id}/pause", s.protected(s.requireAdmin(s.pauseHostContainer), true))
+	s.mux.Handle("POST /api/v1/unmanaged-containers/{id}/unpause", s.protected(s.requireAdmin(s.unpauseHostContainer), true))
 	s.mux.Handle("POST /api/v1/job-plans", s.protected(http.HandlerFunc(s.planJob), true))
 	s.mux.Handle("GET /api/v1/jobs", s.protected(http.HandlerFunc(s.listJobs), false))
 	s.mux.Handle("POST /api/v1/jobs", s.protected(http.HandlerFunc(s.createJob), true))
@@ -128,6 +132,28 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, identityFrom(r.Context()))
+}
+
+func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		CurrentPassword string `json:"currentPassword"`
+		NewPassword     string `json:"newPassword"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeProblem(w, 422, "Invalid request", err.Error())
+		return
+	}
+	err := s.auth.ChangeOwnPassword(r.Context(), identityFrom(r.Context()).UserID, body.CurrentPassword, body.NewPassword)
+	if errors.Is(err, auth.ErrWrongPassword) {
+		writeProblem(w, 401, "Wrong password", err.Error())
+		return
+	}
+	if err != nil {
+		writeProblem(w, 422, "Invalid password", err.Error())
+		return
+	}
+	_ = s.store.InsertAudit(r.Context(), identityFrom(r.Context()).UserID, "user.password", "user", identityFrom(r.Context()).UserID, "")
+	w.WriteHeader(204)
 }
 
 func (s *Server) getHealth(w http.ResponseWriter, r *http.Request) {

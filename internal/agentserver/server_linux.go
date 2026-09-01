@@ -85,6 +85,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /internal/v1/workloads/logs", s.logs)
 	s.mux.HandleFunc("GET /internal/v1/gpu-host-processes", s.hostGPUProcesses)
 	s.mux.HandleFunc("POST /internal/v1/containers/stop", s.stopContainer)
+	s.mux.HandleFunc("POST /internal/v1/containers/pause", s.pauseContainer)
+	s.mux.HandleFunc("POST /internal/v1/containers/unpause", s.unpauseContainer)
 	s.mux.HandleFunc("GET /internal/v1/heartbeats", s.listHeartbeats)
 	s.mux.HandleFunc("POST /internal/v1/heartbeats/ensure", s.ensureHeartbeat)
 	s.mux.HandleFunc("POST /internal/v1/heartbeats/close", s.closeHeartbeat)
@@ -344,6 +346,41 @@ func (s *Server) stopContainer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(204)
+}
+
+func (s *Server) pauseContainer(w http.ResponseWriter, r *http.Request) {
+	id, ok := decodeContainerID(w, r)
+	if !ok {
+		return
+	}
+	if err := s.docker.Pause(r.Context(), id); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(204)
+}
+
+func (s *Server) unpauseContainer(w http.ResponseWriter, r *http.Request) {
+	id, ok := decodeContainerID(w, r)
+	if !ok {
+		return
+	}
+	if err := s.docker.Unpause(r.Context(), id); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(204)
+}
+
+func decodeContainerID(w http.ResponseWriter, r *http.Request) (string, bool) {
+	var body struct {
+		ContainerID string `json:"containerId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ContainerID == "" {
+		writeJSON(w, 400, map[string]string{"error": "containerId required"})
+		return "", false
+	}
+	return body.ContainerID, true
 }
 
 func (s *Server) hostGPUProcesses(w http.ResponseWriter, _ *http.Request) {

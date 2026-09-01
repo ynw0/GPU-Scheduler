@@ -40,11 +40,20 @@ func (s *Store) CreateUser(ctx context.Context, user UserRecord) error {
 	return err
 }
 
+func (s *Store) FindUserByID(ctx context.Context, id string) (UserRecord, error) {
+	return s.scanUser(ctx, `SELECT id,username,COALESCE(email,''),password_hash,role,team_id,failed_logins,locked_until,disabled_at
+        FROM users WHERE id=?`, id)
+}
+
 func (s *Store) FindUserByUsername(ctx context.Context, username string) (UserRecord, error) {
+	return s.scanUser(ctx, `SELECT id,username,COALESCE(email,''),password_hash,role,team_id,failed_logins,locked_until,disabled_at
+        FROM users WHERE username=?`, username)
+}
+
+func (s *Store) scanUser(ctx context.Context, query string, arg string) (UserRecord, error) {
 	var user UserRecord
 	var teamID, lockedUntil, disabledAt sql.NullString
-	err := s.db.QueryRowContext(ctx, `SELECT id,username,COALESCE(email,''),password_hash,role,team_id,failed_logins,locked_until,disabled_at
-        FROM users WHERE username=?`, username).Scan(
+	err := s.db.QueryRowContext(ctx, query, arg).Scan(
 		&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.Role, &teamID,
 		&user.FailedLogins, &lockedUntil, &disabledAt)
 	if err != nil {
@@ -54,6 +63,11 @@ func (s *Store) FindUserByUsername(ctx context.Context, username string) (UserRe
 	user.LockedUntil = parseOptionalTime(lockedUntil)
 	user.DisabledAt = parseOptionalTime(disabledAt)
 	return user, nil
+}
+
+func (s *Store) UpdatePasswordHash(ctx context.Context, userID, hash string) error {
+	_, err := s.db.ExecContext(ctx, "UPDATE users SET password_hash=? WHERE id=?", hash, userID)
+	return err
 }
 
 func (s *Store) RecordFailedLogin(ctx context.Context, userID string, maxAttempts int, lockDuration time.Duration) error {

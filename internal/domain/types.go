@@ -147,6 +147,9 @@ type WorkloadSpec struct {
 	WorkingDirectory string            `json:"workingDirectory,omitempty"`
 	Environment      map[string]string `json:"environment,omitempty"`
 	Mounts           []Mount           `json:"mounts,omitempty"`
+	User             string            `json:"user,omitempty"`
+	ShmSizeBytes     uint64            `json:"shmSizeBytes,omitempty"`
+	PublishedPorts   []PortPublish     `json:"publishedPorts,omitempty"`
 	ComposeSourceID  string            `json:"composeSourceId,omitempty"`
 	Services         []ComposeService  `json:"services,omitempty"`
 }
@@ -155,16 +158,20 @@ func (w WorkloadSpec) AsImage() ImageWorkload {
 	return ImageWorkload{
 		Image: w.Image, Command: w.Command, Entrypoint: w.Entrypoint,
 		WorkingDirectory: w.WorkingDirectory, Environment: w.Environment, Mounts: w.Mounts,
+		User: w.User, ShmSizeBytes: w.ShmSizeBytes, PublishedPorts: w.PublishedPorts,
 	}
 }
 
 type ImageWorkload struct {
 	Image            string            `json:"image"`
-	Command          []string          `json:"command"`
+	Command          []string          `json:"command,omitempty"`
 	Entrypoint       []string          `json:"entrypoint,omitempty"`
 	WorkingDirectory string            `json:"workingDirectory,omitempty"`
 	Environment      map[string]string `json:"environment,omitempty"`
 	Mounts           []Mount           `json:"mounts,omitempty"`
+	User             string            `json:"user,omitempty"`
+	ShmSizeBytes     uint64            `json:"shmSizeBytes,omitempty"`
+	PublishedPorts   []PortPublish     `json:"publishedPorts,omitempty"`
 }
 
 type ComposeWorkload struct {
@@ -182,6 +189,12 @@ type Mount struct {
 	Source   string `json:"source"`
 	Target   string `json:"target"`
 	ReadOnly bool   `json:"readOnly"`
+}
+
+type PortPublish struct {
+	HostPort      uint16 `json:"hostPort"`
+	ContainerPort uint16 `json:"containerPort"`
+	Protocol      string `json:"protocol,omitempty"`
 }
 
 type JobPlan struct {
