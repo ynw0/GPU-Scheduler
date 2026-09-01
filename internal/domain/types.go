@@ -268,16 +268,55 @@ type JobMetricSnapshot struct {
 }
 
 type ContainerClaim struct {
-	ContainerID  string   `json:"containerId"`
-	Name         string   `json:"name"`
-	Image        string   `json:"image"`
-	State        string   `json:"state"`
-	ExitCode     int      `json:"exitCode,omitempty"`
-	ManagedJobID string   `json:"managedJobId,omitempty"`
-	CPUIds       []int    `json:"cpuIds"`
-	GPUUUIDs     []string `json:"gpuUuids"`
-	CPUUnbounded bool     `json:"cpuUnbounded"`
-	GPUUnbounded bool     `json:"gpuUnbounded"`
+	ContainerID      string   `json:"containerId"`
+	Name             string   `json:"name"`
+	Image            string   `json:"image"`
+	State            string   `json:"state"`
+	ExitCode         int      `json:"exitCode,omitempty"`
+	ManagedJobID     string   `json:"managedJobId,omitempty"`
+	CPUIds           []int    `json:"cpuIds"`
+	GPUUUIDs         []string `json:"gpuUuids"`
+	CPUUnbounded     bool     `json:"cpuUnbounded"`
+	GPUUnbounded     bool     `json:"gpuUnbounded"`
+	TrainingGPUUUIDs []string `json:"trainingGpuUuids,omitempty"`
+}
+
+type DiscoveredContainer struct {
+	ContainerID    string
+	Name           string
+	Image          string
+	ManagedJobID   string
+	State          string
+	CPUIds         []int
+	GPUUUIDs       []string
+	CPUUnbounded   bool
+	GPUUnbounded   bool
+	Priority       Priority
+	PriorityLocked bool
+	LastTrainingAt *time.Time
+	FirstSeenAt    time.Time
+	ObservedAt     time.Time
+}
+
+type HostContainer struct {
+	ContainerID      string      `json:"containerId"`
+	Name             string      `json:"name"`
+	Image            string      `json:"image"`
+	State            string      `json:"state"`
+	CPUIds           []int       `json:"cpuIds"`
+	GPUUUIDs         []string    `json:"gpuUuids"`
+	CPUUnbounded     bool        `json:"cpuUnbounded"`
+	GPUUnbounded     bool        `json:"gpuUnbounded"`
+	Training         bool        `json:"training"`
+	TrainingGPUUUIDs []string    `json:"trainingGpuUuids"`
+	MemoryUsedBytes  uint64      `json:"memoryUsedBytes,omitempty"`
+	MemoryLimitBytes uint64      `json:"memoryLimitBytes,omitempty"`
+	GPUs             []GPUMetric `json:"gpus,omitempty"`
+	Priority         Priority    `json:"priority"`
+	PriorityLocked   bool        `json:"priorityLocked"`
+	LastTrainingAt   *time.Time  `json:"lastTrainingAt,omitempty"`
+	FirstSeenAt      time.Time   `json:"firstSeenAt"`
+	SilentSeconds    int64       `json:"silentSeconds"`
 }
 
 type JobAttempt struct {

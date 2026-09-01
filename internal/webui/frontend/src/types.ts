@@ -207,6 +207,27 @@ export interface JobMetricSnapshot {
   }>
 }
 
+export interface HostContainer {
+  containerId: string
+  name: string
+  image: string
+  state: string
+  cpuIds: number[]
+  gpuUuids: string[]
+  cpuUnbounded: boolean
+  gpuUnbounded: boolean
+  training: boolean
+  trainingGpuUuids: string[]
+  memoryUsedBytes?: number
+  memoryLimitBytes?: number
+  gpus?: JobMetricSnapshot['gpus']
+  priority: Job['priority']
+  priorityLocked: boolean
+  lastTrainingAt?: string
+  firstSeenAt: string
+  silentSeconds: number
+}
+
 export interface AuditEvent {
   id: string
   actorUserId?: string

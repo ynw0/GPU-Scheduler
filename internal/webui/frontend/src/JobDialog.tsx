@@ -24,6 +24,10 @@ export function NewJobDialog({ topology, onClose }: { topology?: Topology; onClo
   const [command, setCommand] = useState('python\ntrain.py')
   const [workingDirectory, setWorkingDirectory] = useState('/workspace')
   const [composeSourceId, setComposeSourceId] = useState('')
+  const [composeInput, setComposeInput] = useState<'catalog' | 'path' | 'upload'>('catalog')
+  const [composePath, setComposePath] = useState('')
+  const [composeFileName, setComposeFileName] = useState('compose.yaml')
+  const [composeContent, setComposeContent] = useState('')
   const [serviceName, setServiceName] = useState('train')
   const [priority, setPriority] = useState<JobSpec['priority']>('P2')
   const [gpuMode, setGpuMode] = useState<ResourceRequest['gpuMode']>('auto')
@@ -58,12 +62,42 @@ export function NewJobDialog({ topology, onClose }: { topology?: Topology; onClo
     stopGraceSeconds: 30,
   })
 
+  const fingerprint = () => JSON.stringify({ spec: buildSpec(), composeInput, composePath, composeFileName, composeContent })
+
+  const ensureSource = async (): Promise<string> => {
+    if (kind !== 'compose') return ''
+    if (composeInput === 'catalog') return composeSourceId
+    if (composeSourceId) return composeSourceId
+    if (composeInput === 'path') {
+      const item = await api.createComposeFromPath({ name, filePath: composePath })
+      setComposeSourceId(item.id)
+      return item.id
+    }
+    const item = await api.uploadCompose({ name, fileName: composeFileName, content: composeContent })
+    setComposeSourceId(item.id)
+    return item.id
+  }
+
   const preview = useMutation({
-    mutationFn: () => api.planJob(buildSpec()),
-    onSuccess: (nextPlan) => { setPlan(nextPlan); setPlanKey(JSON.stringify(buildSpec())) },
+    mutationFn: async () => {
+      const sourceId = await ensureSource()
+      const spec = buildSpec()
+      if (kind === 'compose') {
+        spec.workload = { kind: 'compose', composeSourceId: sourceId, services: spec.workload.kind === 'compose' ? spec.workload.services : [{ name: serviceName, class: 'training', resources: resources() }] }
+      }
+      return api.planJob(spec)
+    },
+    onSuccess: (nextPlan) => { setPlan(nextPlan); setPlanKey(fingerprint()) },
   })
   const create = useMutation({
-    mutationFn: () => api.createJob(buildSpec()),
+    mutationFn: async () => {
+      const sourceId = await ensureSource()
+      const spec = buildSpec()
+      if (kind === 'compose') {
+        spec.workload = { kind: 'compose', composeSourceId: sourceId, services: spec.workload.kind === 'compose' ? spec.workload.services : [{ name: serviceName, class: 'training', resources: resources() }] }
+      }
+      return api.createJob(spec)
+    },
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['jobs'] }),
@@ -86,8 +120,9 @@ export function NewJobDialog({ topology, onClose }: { topology?: Topology; onClo
     setPlan(undefined)
   }
   const toggleCPU = (id: number) => setSelectedCPUs((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
-  const ready = name.trim() && (kind === 'image' ? image && command.trim() : composeSourceId && serviceName.trim()) && memoryGB > 0
-  const planCurrent = planKey === JSON.stringify(buildSpec())
+  const composeReady = composeInput === 'catalog' ? composeSourceId : composeInput === 'path' ? composePath.trim() : composeContent.trim()
+  const ready = name.trim() && (kind === 'image' ? image && command.trim() : composeReady && serviceName.trim()) && memoryGB > 0
+  const planCurrent = planKey === fingerprint()
   const allowedNuma = gpuMode === 'manual' ? selectedGPUNuma(topology, selectedGPUs) : new Set<number>()
 
   return (
@@ -120,7 +155,17 @@ export function NewJobDialog({ topology, onClose }: { topology?: Topology; onClo
                 </div>
                 <label>启动 argv <small>每行一个参数，不经过 Shell</small><textarea value={command} onChange={(event) => setCommand(event.target.value)} rows={4} /></label>
               </> : <>
-                <label>Compose 来源<select value={composeSourceId} onChange={(event) => setComposeSourceId(event.target.value)}><option value="">选择已登记来源</option>{(sources.data ?? []).map((item) => <option key={item.id} value={item.id}>{item.name} · {item.entryFile}</option>)}</select></label>
+                <div className="mode-switch">
+                  <button className={composeInput === 'catalog' ? 'active' : ''} onClick={() => { setComposeInput('catalog'); setComposeSourceId(''); setPlan(undefined) }}>已登记</button>
+                  <button className={composeInput === 'path' ? 'active' : ''} onClick={() => { setComposeInput('path'); setComposeSourceId(''); setPlan(undefined) }}>本机路径</button>
+                  <button className={composeInput === 'upload' ? 'active' : ''} onClick={() => { setComposeInput('upload'); setComposeSourceId(''); setPlan(undefined) }}>上传文件</button>
+                </div>
+                {composeInput === 'catalog' && <label>Compose 来源<select value={composeSourceId} onChange={(event) => setComposeSourceId(event.target.value)}><option value="">选择已登记来源</option>{(sources.data ?? []).map((item) => <option key={item.id} value={item.id}>{item.name} · {item.entryFile}</option>)}</select></label>}
+                {composeInput === 'path' && <label>本机 compose 路径<input value={composePath} onChange={(event) => setComposePath(event.target.value)} placeholder="/mnt/disk/train/compose.yaml" /></label>}
+                {composeInput === 'upload' && <>
+                  <label>文件名<input value={composeFileName} onChange={(event) => setComposeFileName(event.target.value)} /></label>
+                  <label>Compose 正文<textarea value={composeContent} onChange={(event) => setComposeContent(event.target.value)} rows={8} placeholder="services:&#10;  train:&#10;    image: ..." /></label>
+                </>}
                 <div className="field-grid two">
                   <label>训练服务名<input value={serviceName} onChange={(event) => setServiceName(event.target.value)} /></label>
                   <label>内存限制（GB）<input type="number" min={1} value={memoryGB} onChange={(event) => setMemoryGB(Number(event.target.value))} /></label>

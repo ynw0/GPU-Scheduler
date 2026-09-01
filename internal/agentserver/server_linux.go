@@ -79,6 +79,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /internal/v1/workloads/remove", s.removeAttempt)
 	s.mux.HandleFunc("GET /internal/v1/workloads/logs", s.logs)
 	s.mux.HandleFunc("GET /internal/v1/gpu-host-processes", s.hostGPUProcesses)
+	s.mux.HandleFunc("POST /internal/v1/containers/stop", s.stopContainer)
 }
 
 func (s *Server) containerMetrics(w http.ResponseWriter, r *http.Request) {
@@ -131,6 +132,18 @@ func (s *Server) claims(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, err)
 		return
+	}
+	compute, err := s.monitor.GPUCompute()
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	for i := range claims {
+		for containerID, uuids := range compute.ByContainer {
+			if monitor.MatchContainerID(claims[i].ContainerID, containerID) {
+				claims[i].TrainingGPUUUIDs = append(claims[i].TrainingGPUUUIDs, uuids...)
+			}
+		}
 	}
 	writeJSON(w, 200, claims)
 }
@@ -223,6 +236,26 @@ func (s *Server) logs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.WriteHeader(200)
 	_, _ = io.Copy(w, reader)
+}
+
+func (s *Server) stopContainer(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		ContainerID    string `json:"containerId"`
+		TimeoutSeconds int    `json:"timeoutSeconds"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ContainerID == "" {
+		writeJSON(w, 400, map[string]string{"error": "containerId required"})
+		return
+	}
+	timeout := body.TimeoutSeconds
+	if timeout <= 0 {
+		timeout = 10
+	}
+	if err := s.docker.Stop(r.Context(), executor.RuntimeRef{ContainerIDs: map[string]string{"main": body.ContainerID}}, timeout); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(204)
 }
 
 func (s *Server) hostGPUProcesses(w http.ResponseWriter, _ *http.Request) {

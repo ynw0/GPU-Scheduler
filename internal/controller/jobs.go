@@ -261,12 +261,13 @@ func (s *Server) currentAvailability(ctx context.Context) (domain.Topology, doma
 		if !slices.Contains([]string{"running", "created", "restarting", "paused"}, strings.ToLower(claim.State)) {
 			continue
 		}
+		if len(claim.TrainingGPUUUIDs) == 0 {
+			continue
+		}
 		if !claim.CPUUnbounded {
 			blockedCPU = append(blockedCPU, claim.CPUIds...)
 		}
-		if !claim.GPUUnbounded {
-			blockedGPU = append(blockedGPU, claim.GPUUUIDs...)
-		}
+		blockedGPU = append(blockedGPU, claim.TrainingGPUUUIDs...)
 	}
 	if hostGPUs, err := s.agent.HostGPUProcesses(ctx); err == nil {
 		blockedGPU = append(blockedGPU, hostGPUs...)

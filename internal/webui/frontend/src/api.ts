@@ -1,6 +1,6 @@
 import type {
   AuditEvent, Availability, ComposeSource, Health, ImageInfo, Job, JobMetricSnapshot, JobPlan, JobSpec,
-  Notification, Quota, ResourcePool, Team, Template, Topology, User,
+  Notification, Quota, ResourcePool, Team, Template, Topology, User, HostContainer,
 } from './types'
 
 export class APIError extends Error {
@@ -70,6 +70,11 @@ export const api = {
   createJob: (spec: JobSpec) => mutate<Job>('/jobs', 'POST', spec, { 'Idempotency-Key': crypto.randomUUID() }),
   jobAction: (id: string, action: 'start' | 'stop' | 'cancel' | 'retry') => mutate<Job>(`/jobs/${id}/actions/${action}`, 'POST'),
   createComposeSource: (value: { name: string; rootPath: string; entryFile: string }) => mutate<ComposeSource>('/compose-sources', 'POST', value),
+  createComposeFromPath: (value: { name: string; filePath: string }) => mutate<ComposeSource>('/compose-sources/from-path', 'POST', value),
+  uploadCompose: (value: { name: string; fileName: string; content: string }) => mutate<ComposeSource>('/compose-sources/upload', 'POST', value),
+  hostContainers: () => request<HostContainer[]>('/unmanaged-containers'),
+  patchHostContainer: (id: string, priority: Job['priority']) => mutate<void>(`/unmanaged-containers/${id}`, 'PATCH', { priority }),
+  stopHostContainer: (id: string) => mutate<void>(`/unmanaged-containers/${id}/stop`, 'POST'),
   createTeam: (name: string) => mutate<Team>('/teams', 'POST', { name }),
   createUser: (value: { username: string; password: string; role: User['role']; email?: string; teamId?: string }) => mutate<User>('/users', 'POST', value),
   upsertQuota: (value: Quota) => mutate<Quota>('/quotas', 'POST', value),

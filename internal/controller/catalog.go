@@ -2,7 +2,13 @@ package controller
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/google/uuid"
 
 	"gpu-scheduler/internal/domain"
 	"gpu-scheduler/internal/scheduler"
@@ -34,6 +40,108 @@ func (s *Server) createComposeSource(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = s.store.InsertAudit(r.Context(), identityFrom(r.Context()).UserID, "compose-source.create", "compose_source", item.ID, item.Name)
 	writeJSON(w, 201, item)
+}
+
+func (s *Server) createComposeFromPath(w http.ResponseWriter, r *http.Request) {
+	if !canCreateJobs(identityFrom(r.Context())) {
+		writeProblem(w, 403, "Forbidden", "")
+		return
+	}
+	var body struct{ Name, FilePath string }
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeProblem(w, 422, "Invalid request", err.Error())
+		return
+	}
+	root, entry, err := resolveComposeFilePath(body.FilePath)
+	if err != nil {
+		writeProblem(w, 422, "Invalid compose path", err.Error())
+		return
+	}
+	name := strings.TrimSpace(body.Name)
+	if name == "" {
+		name = entry
+	}
+	item, err := s.store.CreateComposeSource(r.Context(), name, root, entry)
+	if err != nil {
+		writeProblem(w, 409, "Create failed", err.Error())
+		return
+	}
+	_ = s.store.InsertAudit(r.Context(), identityFrom(r.Context()).UserID, "compose-source.create", "compose_source", item.ID, name)
+	writeJSON(w, 201, item)
+}
+
+func (s *Server) uploadComposeSource(w http.ResponseWriter, r *http.Request) {
+	if !canCreateJobs(identityFrom(r.Context())) {
+		writeProblem(w, 403, "Forbidden", "")
+		return
+	}
+	var body struct{ Name, FileName, Content string }
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeProblem(w, 422, "Invalid request", err.Error())
+		return
+	}
+	if strings.TrimSpace(body.Content) == "" {
+		writeProblem(w, 422, "Invalid request", "compose 内容为空")
+		return
+	}
+	entry := "compose.yaml"
+	switch strings.ToLower(filepath.Ext(body.FileName)) {
+	case ".yml":
+		entry = "compose.yml"
+	case ".yaml", "":
+		entry = "compose.yaml"
+	default:
+		writeProblem(w, 422, "Invalid request", "只接受 .yaml 或 .yml")
+		return
+	}
+	id := uuid.NewString()
+	root := filepath.Join(s.cfg.Agent.StateDirectory, "compose-uploads", id)
+	if err := os.MkdirAll(root, 0o750); err != nil {
+		writeProblem(w, 500, "Create failed", err.Error())
+		return
+	}
+	if err := os.WriteFile(filepath.Join(root, entry), []byte(body.Content), 0o640); err != nil {
+		writeProblem(w, 500, "Create failed", err.Error())
+		return
+	}
+	name := strings.TrimSpace(body.Name)
+	if name == "" {
+		name = entry
+	}
+	item, err := s.store.CreateComposeSource(r.Context(), name, root, entry)
+	if err != nil {
+		writeProblem(w, 409, "Create failed", err.Error())
+		return
+	}
+	_ = s.store.InsertAudit(r.Context(), identityFrom(r.Context()).UserID, "compose-source.upload", "compose_source", item.ID, name)
+	writeJSON(w, 201, item)
+}
+
+func resolveComposeFilePath(path string) (string, string, error) {
+	if strings.TrimSpace(path) == "" {
+		return "", "", fmt.Errorf("路径不能为空")
+	}
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return "", "", err
+	}
+	absolute, err = filepath.EvalSymlinks(absolute)
+	if err != nil {
+		return "", "", err
+	}
+	info, err := os.Stat(absolute)
+	if err != nil {
+		return "", "", err
+	}
+	if info.IsDir() {
+		return "", "", fmt.Errorf("路径必须是 compose 文件")
+	}
+	switch strings.ToLower(filepath.Ext(absolute)) {
+	case ".yaml", ".yml":
+	default:
+		return "", "", fmt.Errorf("只接受 .yaml 或 .yml")
+	}
+	return filepath.Dir(absolute), filepath.Base(absolute), nil
 }
 
 func (s *Server) updateComposeSource(w http.ResponseWriter, r *http.Request) {

@@ -59,6 +59,7 @@ func (s *Server) dispatchQueue(ctx context.Context) {
 	}
 	next, ok := queue.Next(candidates)
 	if !ok {
+		s.preemptForQueuedJobs(ctx, jobs)
 		return
 	}
 	for _, candidate := range candidates {
@@ -141,6 +142,8 @@ func (s *Server) reconcileOnce(ctx context.Context) {
 			drifted[drift.JobID] = struct{}{}
 		}
 	}
+	s.syncHostContainers(ctx, claims)
+	s.preemptExternal(ctx, claims)
 	for _, job := range active {
 		claimsForJob := byJob[job.ID]
 		switch job.State {

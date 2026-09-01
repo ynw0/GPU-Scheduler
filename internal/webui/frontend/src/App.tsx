@@ -8,6 +8,7 @@ import {
   ChevronRight,
   CircleGauge,
   Clock3,
+  Container,
   Cpu,
   Database,
   Gauge,
@@ -22,15 +23,17 @@ import {
 } from 'lucide-react'
 import { api } from './api'
 import { AdminPage } from './AdminPage'
+import { HostContainersPage } from './HostContainers'
 import { JobDetail } from './JobDetail'
 import { NewJobDialog } from './JobDialog'
 import type { GPU, Job, LogicalCPU, NUMANode, Topology } from './types'
 
-type Section = 'overview' | 'jobs' | 'queue' | 'templates' | 'admin'
+type Section = 'overview' | 'jobs' | 'host' | 'queue' | 'templates' | 'admin'
 
 const navItems: Array<{ id: Section; label: string; icon: typeof LayoutGrid }> = [
   { id: 'overview', label: '资源总览', icon: LayoutGrid },
   { id: 'jobs', label: '训练任务', icon: TerminalSquare },
+  { id: 'host', label: '宿主机容器', icon: Container },
   { id: 'queue', label: '调度队列', icon: ListOrdered },
   { id: 'templates', label: '任务模板', icon: Boxes },
   { id: 'admin', label: '系统管理', icon: ShieldCheck },
@@ -414,6 +417,7 @@ function SectionContent({
   onAction: (id: string, name: 'start' | 'stop' | 'cancel' | 'retry') => void
 }) {
   if (section === 'admin') return <AdminPage role={role} />
+  if (section === 'host') return <HostContainersPage role={role} />
   if (section === 'templates') {
     return (
       <section className="workload-page overview-enter">

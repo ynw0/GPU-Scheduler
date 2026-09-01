@@ -66,6 +66,12 @@ func (c *Client) ContainerMetrics(ctx context.Context, containerID string) (doma
 	return result, nil
 }
 
+func (c *Client) StopContainer(ctx context.Context, containerID string, timeoutSeconds int) error {
+	return c.postJSON(ctx, c.longClient, "/internal/v1/containers/stop", map[string]any{
+		"containerId": containerID, "timeoutSeconds": timeoutSeconds,
+	}, nil)
+}
+
 func (c *Client) HostGPUProcesses(ctx context.Context) ([]string, error) {
 	var result []string
 	if err := c.getJSON(ctx, "/internal/v1/gpu-host-processes", &result); err != nil {

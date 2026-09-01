@@ -57,6 +57,8 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /api/v1/resources/availability", s.protected(http.HandlerFunc(s.getAvailability), false))
 	s.mux.Handle("GET /api/v1/images", s.protected(http.HandlerFunc(s.getImages), false))
 	s.mux.Handle("GET /api/v1/unmanaged-containers", s.protected(http.HandlerFunc(s.getUnmanaged), false))
+	s.mux.Handle("PATCH /api/v1/unmanaged-containers/{id}", s.protected(s.requireAdmin(s.patchHostContainer), true))
+	s.mux.Handle("POST /api/v1/unmanaged-containers/{id}/stop", s.protected(s.requireAdmin(s.stopHostContainer), true))
 	s.mux.Handle("POST /api/v1/job-plans", s.protected(http.HandlerFunc(s.planJob), true))
 	s.mux.Handle("GET /api/v1/jobs", s.protected(http.HandlerFunc(s.listJobs), false))
 	s.mux.Handle("POST /api/v1/jobs", s.protected(http.HandlerFunc(s.createJob), true))
@@ -68,6 +70,8 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /api/v1/events/stream", s.protected(http.HandlerFunc(s.streamEvents), false))
 	s.mux.Handle("GET /api/v1/compose-sources", s.protected(http.HandlerFunc(s.listComposeSources), false))
 	s.mux.Handle("POST /api/v1/compose-sources", s.protected(s.requireAdmin(s.createComposeSource), true))
+	s.mux.Handle("POST /api/v1/compose-sources/from-path", s.protected(http.HandlerFunc(s.createComposeFromPath), true))
+	s.mux.Handle("POST /api/v1/compose-sources/upload", s.protected(http.HandlerFunc(s.uploadComposeSource), true))
 	s.mux.Handle("PATCH /api/v1/compose-sources/{id}", s.protected(s.requireAdmin(s.updateComposeSource), true))
 	s.mux.Handle("GET /api/v1/templates", s.protected(http.HandlerFunc(s.listTemplates), false))
 	s.mux.Handle("POST /api/v1/templates", s.protected(http.HandlerFunc(s.createTemplate), true))
@@ -165,21 +169,6 @@ func (s *Server) getImages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, images)
-}
-
-func (s *Server) getUnmanaged(w http.ResponseWriter, r *http.Request) {
-	claims, err := s.agent.Claims(r.Context())
-	if err != nil {
-		writeProblem(w, 503, "Containers unavailable", err.Error())
-		return
-	}
-	result := claims[:0]
-	for _, claim := range claims {
-		if claim.ManagedJobID == "" {
-			result = append(result, claim)
-		}
-	}
-	writeJSON(w, 200, result)
 }
 
 func (s *Server) protected(next http.Handler, csrf bool) http.Handler {
