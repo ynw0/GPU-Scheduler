@@ -221,6 +221,7 @@ func (d *Docker) claimFrom(ctx context.Context, item container.Summary) (domain.
 	claim := domain.ContainerClaim{
 		ContainerID: item.ID, Name: strings.TrimPrefix(firstName(item.Names), "/"), Image: item.Image,
 		State: string(item.State), ManagedJobID: labels[LabelJobID],
+		CPUIds: []int{}, GPUUUIDs: []string{}, TrainingGPUUUIDs: []string{},
 		RuntimeHeartbeatAt: time.Now().UTC(), DockerHealth: "none", CPUUnbounded: true,
 	}
 	if info.State != nil {

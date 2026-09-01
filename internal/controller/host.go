@@ -257,9 +257,10 @@ func hostContainerFrom(claim domain.ContainerClaim, record domain.DiscoveredCont
 	}
 	item := domain.HostContainer{
 		ContainerID: claim.ContainerID, Name: claim.Name, Image: claim.Image, State: claim.State,
-		CPUIds: claim.CPUIds, GPUUUIDs: claim.GPUUUIDs, CPUUnbounded: claim.CPUUnbounded, GPUUnbounded: claim.GPUUnbounded,
+		CPUIds: orEmptyInts(claim.CPUIds), GPUUUIDs: orEmptyStrings(claim.GPUUUIDs),
+		CPUUnbounded: claim.CPUUnbounded, GPUUnbounded: claim.GPUUnbounded,
 		Training:         len(claim.TrainingGPUUUIDs) > 0 && claimLive(claim.State),
-		TrainingGPUUUIDs: claim.TrainingGPUUUIDs,
+		TrainingGPUUUIDs: orEmptyStrings(claim.TrainingGPUUUIDs),
 		DockerHealth:     claim.DockerHealth, CPUActivity: claim.CPUActivity, GPUActivity: claim.GPUActivity, OOMUnder: claim.OOMUnder,
 		Priority: priority, PriorityLocked: record.PriorityLocked,
 		LastTrainingAt: record.LastTrainingAt, FirstSeenAt: firstSeen, SilentSeconds: silent,
@@ -280,4 +281,18 @@ func claimLive(state string) bool {
 	default:
 		return false
 	}
+}
+
+func orEmptyInts(values []int) []int {
+	if values == nil {
+		return []int{}
+	}
+	return values
+}
+
+func orEmptyStrings(values []string) []string {
+	if values == nil {
+		return []string{}
+	}
+	return values
 }

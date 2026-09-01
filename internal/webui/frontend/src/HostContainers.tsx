@@ -15,15 +15,17 @@ function formatSilent(seconds: number): string {
 }
 
 function cpuLabel(item: HostContainer): string {
+  const ids = item.cpuIds ?? []
   if (item.cpuUnbounded) return '未限制'
-  if (!item.cpuIds.length) return '—'
-  return `${item.cpuIds.length} 线程`
+  if (!ids.length) return '—'
+  return `${ids.length} 线程`
 }
 
 function gpuLabel(item: HostContainer): string {
+  const uuids = item.gpuUuids ?? []
   if (item.gpuUnbounded) return '全部 GPU'
-  if (!item.gpuUuids.length) return '无 GPU'
-  return `${item.gpuUuids.length} 张卡`
+  if (!uuids.length) return '无 GPU'
+  return `${uuids.length} 张卡`
 }
 
 function occupancyLabel(item: HostContainer): string {

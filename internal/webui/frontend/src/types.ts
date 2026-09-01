@@ -229,8 +229,8 @@ export interface HostContainer {
   name: string
   image: string
   state: string
-  cpuIds: number[]
-  gpuUuids: string[]
+  cpuIds?: number[]
+  gpuUuids?: string[]
   cpuUnbounded: boolean
   gpuUnbounded: boolean
   training: boolean
