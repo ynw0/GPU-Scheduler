@@ -273,7 +273,7 @@ export function NewJobDialog({ topology, initialSpec, onClose }: { topology?: To
                   <button className={composeInput === 'path' ? 'active' : ''} onClick={() => { setComposeInput('path'); setComposeSourceId(''); setPlan(undefined) }}>本机路径</button>
                   <button className={composeInput === 'upload' ? 'active' : ''} onClick={() => { setComposeInput('upload'); setComposeSourceId(''); setPlan(undefined) }}>上传文件</button>
                 </div>
-                {composeInput === 'catalog' && <label>Compose 来源<select value={composeSourceId} onChange={(event) => setComposeSourceId(event.target.value)}><option value="">选择已登记来源</option>{(sources.data ?? []).map((item) => <option key={item.id} value={item.id}>{item.name} · {item.entryFile}</option>)}</select></label>}
+                {composeInput === 'catalog' && <label>Compose 来源<select value={composeSourceId} onChange={(event) => setComposeSourceId(event.target.value)}><option value="">选择已登记来源</option>{(sources.data ?? []).filter((item) => item.enabled).map((item) => <option key={item.id} value={item.id}>{item.name} · {item.entryFile}</option>)}</select></label>}
                 {composeInput === 'path' && <label>本机 compose 路径<input value={composePath} onChange={(event) => setComposePath(event.target.value)} placeholder="/mnt/disk/train/compose.yaml" /></label>}
                 {composeInput === 'upload' && <>
                   <label>文件名<input value={composeFileName} onChange={(event) => setComposeFileName(event.target.value)} /></label>

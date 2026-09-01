@@ -215,6 +215,7 @@ type Job struct {
 	TeamID         string    `json:"teamId,omitempty"`
 	Spec           JobSpec   `json:"spec"`
 	BypassCount    int       `json:"bypassCount"`
+	LastError      string    `json:"lastError,omitempty"`
 	IdempotencyKey string    `json:"-"`
 	CreatedAt      time.Time `json:"createdAt"`
 	UpdatedAt      time.Time `json:"updatedAt"`

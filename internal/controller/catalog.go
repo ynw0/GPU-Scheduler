@@ -285,6 +285,7 @@ func (s *Server) updateUser(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Role     domain.Role `json:"role"`
 		TeamID   string      `json:"teamId"`
+		Email    *string     `json:"email"`
 		Disabled *bool       `json:"disabled"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -305,11 +306,36 @@ func (s *Server) updateUser(w http.ResponseWriter, r *http.Request) {
 	if body.Disabled != nil {
 		disabled = *body.Disabled
 	}
-	if err := s.store.UpdateUser(r.Context(), id, role, body.TeamID, disabled); err != nil {
+	email := current.Email
+	if body.Email != nil {
+		email = *body.Email
+	}
+	if err := s.store.UpdateUser(r.Context(), id, role, body.TeamID, email, disabled); err != nil {
 		writeProblem(w, 500, "Update failed", err.Error())
 		return
 	}
 	_ = s.store.InsertAudit(r.Context(), identityFrom(r.Context()).UserID, "user.update", "user", id, string(role))
+	w.WriteHeader(204)
+}
+
+func (s *Server) resetUserPassword(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		NewPassword string `json:"newPassword"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeProblem(w, 422, "Invalid request", err.Error())
+		return
+	}
+	id := r.PathValue("id")
+	if _, err := s.store.GetUser(r.Context(), id); err != nil {
+		writeProblem(w, 404, "User not found", "")
+		return
+	}
+	if err := s.auth.SetPassword(r.Context(), id, body.NewPassword); err != nil {
+		writeProblem(w, 422, "Invalid password", err.Error())
+		return
+	}
+	_ = s.store.InsertAudit(r.Context(), identityFrom(r.Context()).UserID, "user.password.reset", "user", id, "")
 	w.WriteHeader(204)
 }
 

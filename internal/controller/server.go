@@ -86,6 +86,7 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /api/v1/users", s.protected(s.requireAdmin(s.listUsers), false))
 	s.mux.Handle("POST /api/v1/users", s.protected(s.requireAdmin(s.createUser), true))
 	s.mux.Handle("PATCH /api/v1/users/{id}", s.protected(s.requireAdmin(s.updateUser), true))
+	s.mux.Handle("POST /api/v1/users/{id}/password", s.protected(s.requireAdmin(s.resetUserPassword), true))
 	s.mux.Handle("GET /api/v1/quotas", s.protected(s.requireAdmin(s.listQuotas), false))
 	s.mux.Handle("POST /api/v1/quotas", s.protected(s.requireAdmin(s.upsertQuota), true))
 	s.mux.Handle("PATCH /api/v1/quotas/{id}", s.protected(s.requireAdmin(s.upsertQuota), true))

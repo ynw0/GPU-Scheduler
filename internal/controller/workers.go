@@ -183,6 +183,11 @@ func (s *Server) finishJob(ctx context.Context, job domain.Job, to domain.JobSta
 	if err := s.store.TransitionJob(ctx, job.ID, to); err != nil {
 		return
 	}
+	if to == domain.JobSucceeded {
+		_ = s.store.SetJobLastError(ctx, job.ID, "")
+	} else {
+		_ = s.store.SetJobLastError(ctx, job.ID, reason)
+	}
 	_ = s.store.ReleaseAllocations(ctx, job.ID)
 	if attempt, err := s.store.LatestAttempt(ctx, job.ID); err == nil {
 		_ = s.store.FinishAttempt(ctx, attempt.ID, string(to), store.RuntimeFromAttempt(attempt))

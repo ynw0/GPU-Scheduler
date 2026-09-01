@@ -86,6 +86,7 @@ export interface Job {
     gpuActivity: boolean
     oomUnder: boolean
   }
+  lastError?: string
 }
 
 export interface Allocation {

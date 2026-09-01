@@ -137,6 +137,17 @@ func (s *Service) Logout(ctx context.Context, sessionToken string) error {
 	return s.store.DeleteSession(ctx, hashToken(sessionToken))
 }
 
+func (s *Service) SetPassword(ctx context.Context, userID, next string) error {
+	if len(next) < s.minPassword {
+		return s.passwordTooShort()
+	}
+	hash, err := HashPassword(next)
+	if err != nil {
+		return err
+	}
+	return s.store.UpdatePasswordHash(ctx, userID, hash)
+}
+
 func (s *Service) ChangeOwnPassword(ctx context.Context, userID, current, next string) error {
 	if len(next) < s.minPassword {
 		return s.passwordTooShort()

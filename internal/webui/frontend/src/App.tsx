@@ -96,6 +96,7 @@ export function App() {
 
   const running = (jobs.data ?? []).filter((job) => job.state === 'RUNNING')
   const queued = (jobs.data ?? []).filter((job) => job.state === 'QUEUED')
+  const unreadCount = (notifications.data ?? []).filter((item) => !item.readAt).length
   const isOffline = health.data?.agent === 'offline'
   const canWrite = me.data.role === 'Admin' || me.data.role === 'TeamOperator' || me.data.role === 'User'
 
@@ -124,7 +125,9 @@ export function App() {
         </nav>
         <div className="rail-bottom">
           <button className={notifyOpen ? 'rail-item active' : 'rail-item'} title="通知" onClick={() => setNotifyOpen((value) => !value)}>
-            <Bell size={19} /><span>通知</span>
+            <Bell size={19} />
+            {unreadCount > 0 && <b className="rail-badge">{unreadCount > 99 ? '99+' : unreadCount}</b>}
+            <span>通知</span>
           </button>
           <AccountMenu user={me.data} />
         </div>

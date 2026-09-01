@@ -19,6 +19,12 @@ function formatBytes(value = 0): string {
   return `${(value / 1024).toFixed(1)} KB`
 }
 
+function nextCloneName(name: string): string {
+  const match = /^(.*)-(\d+)$/.exec(name)
+  if (!match) return `${name}-2`
+  return `${match[1]}-${Number(match[2]) + 1}`
+}
+
 function specResources(spec: JobSpec): ResourceRequest {
   if (spec.workload.kind === 'compose') {
     return spec.workload.services.find((item) => item.class === 'training')?.resources ?? spec.resources
@@ -104,6 +110,9 @@ export function JobDetail({
                 {job.runtime.oomUnder ? ' · OOM' : ''}
               </p>
             )}
+            {job.lastError && ['FAILED', 'CANCELED', 'ORPHANED'].includes(job.state) && (
+              <div className="plan-conflict">{job.lastError}</div>
+            )}
             {(job.allocations ?? []).map((item) => (
               <div className="plan-line" key={item.id}><span>{item.resourceType}</span><strong>{item.resourceId}</strong></div>
             ))}
@@ -127,7 +136,7 @@ export function JobDetail({
             </div>
             {canWrite && (
               <div className="dialog-actions">
-                {job.spec && <button className="secondary-action" onClick={() => onClone(job.spec!)}>再开一次</button>}
+                {job.spec && <button className="secondary-action" onClick={() => onClone({ ...job.spec!, name: nextCloneName(job.spec!.name || job.name) })}>再开一次</button>}
                 {job.state === 'QUEUED' && <button className="secondary-action" onClick={() => onAction('start')}>立即调度</button>}
                 {(job.state === 'RUNNING' || job.state === 'DEGRADED' || job.state === 'DRIFTED') && <button className="secondary-action" onClick={() => onAction('stop')}>停止</button>}
                 {['QUEUED', 'RESERVED', 'RUNNING', 'CREATING', 'STARTING', 'DEGRADED', 'DRIFTED'].includes(job.state) && <button className="secondary-action" onClick={() => onAction('cancel')}>取消</button>}

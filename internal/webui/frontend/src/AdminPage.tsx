@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
 import { cpuSelectable, resourceNuma, selectedGPUNuma } from './numa'
-import type { ComposeSource, User } from './types'
+import type { ComposeSource, Team, User } from './types'
 
 export function AdminPage({ role }: { role: User['role'] }) {
   const queryClient = useQueryClient()
@@ -42,9 +42,12 @@ export function AdminPage({ role }: { role: User['role'] }) {
     onMutate: () => setUserCreated(''),
   })
   const updateUser = useMutation({
-    mutationFn: (value: { id: string; role: User['role']; teamId: string; disabled: boolean }) =>
-      api.updateUser(value.id, { role: value.role, teamId: value.teamId, disabled: value.disabled }),
+    mutationFn: (value: { id: string; role: User['role']; teamId: string; disabled: boolean; email: string }) =>
+      api.updateUser(value.id, { role: value.role, teamId: value.teamId, disabled: value.disabled, email: value.email }),
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['users'] }) },
+  })
+  const resetPassword = useMutation({
+    mutationFn: ({ id, newPassword }: { id: string; newPassword: string }) => api.resetUserPassword(id, newPassword),
   })
   const createTeam = useMutation({
     mutationFn: () => api.createTeam(teamName),
@@ -144,35 +147,19 @@ export function AdminPage({ role }: { role: User['role'] }) {
             {userCreated && <div className="plan-status ok">{userCreated}</div>}
             {createUser.error && <div className="plan-conflict">{String(createUser.error.message)}</div>}
             {updateUser.error && <div className="plan-conflict">{String(updateUser.error.message)}</div>}
+            {resetPassword.error && <div className="plan-conflict">{String(resetPassword.error.message)}</div>}
           </form>
           <div className="full-job-table">
-            <div className="full-job-row header"><span>用户</span><span>角色</span><span>团队</span><span>操作</span></div>
+            <div className="full-job-row header"><span>用户</span><span>邮箱</span><span>角色</span><span>团队</span><span>操作</span></div>
             {(users.data ?? []).map((user) => (
-              <div className="full-job-row" key={user.id}>
-                <span>{user.username}{user.disabled ? ' · 已停用' : ''}</span>
-                <select
-                  className="host-priority"
-                  value={user.role}
-                  onChange={(event) => updateUser.mutate({ id: user.id, role: event.target.value as User['role'], teamId: user.teamId ?? '', disabled: Boolean(user.disabled) })}
-                >
-                  <option>User</option><option>TeamOperator</option><option>Admin</option><option>Viewer</option><option>Auditor</option>
-                </select>
-                <select
-                  className="host-priority"
-                  value={user.teamId || ''}
-                  onChange={(event) => updateUser.mutate({ id: user.id, role: user.role, teamId: event.target.value, disabled: Boolean(user.disabled) })}
-                >
-                  <option value="">无团队</option>
-                  {(teams.data ?? []).map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
-                </select>
-                <button
-                  className="text-button"
-                  disabled={me.data?.id === user.id}
-                  onClick={() => updateUser.mutate({ id: user.id, role: user.role, teamId: user.teamId ?? '', disabled: !user.disabled })}
-                >
-                  {user.disabled ? '启用' : '停用'}
-                </button>
-              </div>
+              <UserRow
+                key={user.id}
+                user={user}
+                teams={teams.data ?? []}
+                self={me.data?.id === user.id}
+                onUpdate={(value) => updateUser.mutate(value)}
+                onReset={(newPassword) => resetPassword.mutateAsync({ id: user.id, newPassword })}
+              />
             ))}
           </div>
         </div>
@@ -292,5 +279,93 @@ export function AdminPage({ role }: { role: User['role'] }) {
         </div>
       )}
     </section>
+  )
+}
+
+function UserRow({
+  user, teams, self, onUpdate, onReset,
+}: {
+  user: User
+  teams: Team[]
+  self: boolean
+  onUpdate: (value: { id: string; role: User['role']; teamId: string; disabled: boolean; email: string }) => void
+  onReset: (newPassword: string) => Promise<unknown>
+}) {
+  const [email, setEmail] = useState(user.email ?? '')
+  const [resetOpen, setResetOpen] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [saving, setSaving] = useState(false)
+  useEffect(() => { setEmail(user.email ?? '') }, [user.email])
+
+  const patch = (extra: { role?: User['role']; teamId?: string; disabled?: boolean; email?: string }) => {
+    onUpdate({
+      id: user.id,
+      role: extra.role ?? user.role,
+      teamId: extra.teamId ?? user.teamId ?? '',
+      disabled: extra.disabled ?? Boolean(user.disabled),
+      email: extra.email ?? email.trim(),
+    })
+  }
+
+  return (
+    <div className="full-job-row">
+      <span>{user.username}{user.disabled ? ' · 已停用' : ''}</span>
+      <input
+        className="host-priority"
+        type="email"
+        value={email}
+        onChange={(event) => setEmail(event.target.value)}
+        onBlur={() => {
+          const next = email.trim()
+          if (next !== (user.email ?? '')) patch({ email: next })
+        }}
+      />
+      <select
+        className="host-priority"
+        value={user.role}
+        onChange={(event) => patch({ role: event.target.value as User['role'] })}
+      >
+        <option>User</option><option>TeamOperator</option><option>Admin</option><option>Viewer</option><option>Auditor</option>
+      </select>
+      <select
+        className="host-priority"
+        value={user.teamId || ''}
+        onChange={(event) => patch({ teamId: event.target.value })}
+      >
+        <option value="">无团队</option>
+        {teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+      </select>
+      <div className="user-actions">
+        <button className="text-button" disabled={self} onClick={() => patch({ disabled: !user.disabled })}>
+          {user.disabled ? '启用' : '停用'}
+        </button>
+        <button className="text-button" type="button" onClick={() => { setResetOpen((value) => !value); setNewPassword('') }}>
+          重置密码
+        </button>
+        {resetOpen && (
+          <>
+            <input
+              className="host-priority"
+              type="password"
+              autoComplete="new-password"
+              placeholder="新密码"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+            />
+            <button
+              className="text-button"
+              type="button"
+              disabled={saving || !newPassword}
+              onClick={() => {
+                setSaving(true)
+                void onReset(newPassword).then(() => { setResetOpen(false); setNewPassword('') }).finally(() => setSaving(false))
+              }}
+            >
+              {saving ? '正在保存…' : '确认'}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
   )
 }

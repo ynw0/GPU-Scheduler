@@ -370,9 +370,27 @@ paths:
               properties:
                 role: { type: string, enum: [Admin, TeamOperator, User, Viewer, Auditor] }
                 teamId: { type: string }
+                email: { type: string }
                 disabled: { type: boolean }
       responses:
         "204": { description: Updated }
+  /users/{id}/password:
+    post:
+      operationId: resetUserPassword
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [newPassword]
+              properties:
+                newPassword: { type: string, minLength: 12 }
+      responses:
+        "204": { description: Password reset }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
   /quotas:
     get:
       operationId: listQuotas
@@ -461,6 +479,7 @@ components:
         username: { type: string }
         role: { type: string, enum: [Viewer, User, TeamOperator, Admin, Auditor] }
         teamId: { type: [string, "null"], format: uuid }
+        email: { type: string }
     Topology:
       type: object
       required: [hostname, cpus, numaNodes, gpus, observedAt]
@@ -616,6 +635,7 @@ components:
         ownerId: { type: string, format: uuid }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+        lastError: { type: string }
     TrainingHeartbeat:
       type: object
       required: [phase]

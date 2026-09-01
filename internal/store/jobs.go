@@ -14,7 +14,7 @@ import (
 )
 
 func (s *Store) ListJobsVisible(ctx context.Context, userID, teamID string, role domain.Role) ([]domain.Job, error) {
-	query := `SELECT id,name,state,priority,owner_id,COALESCE(team_id,''),spec_json,bypass_count,created_at,updated_at FROM jobs`
+	query := `SELECT id,name,state,priority,owner_id,COALESCE(team_id,''),spec_json,bypass_count,COALESCE(last_error,''),created_at,updated_at FROM jobs`
 	args := []any{}
 	switch role {
 	case domain.RoleAdmin, domain.RoleAuditor, domain.RoleViewer:
@@ -43,7 +43,7 @@ func (s *Store) ListJobsVisible(ctx context.Context, userID, teamID string, role
 }
 
 func (s *Store) GetJob(ctx context.Context, id string) (domain.Job, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id,name,state,priority,owner_id,COALESCE(team_id,''),spec_json,bypass_count,created_at,updated_at
+	row := s.db.QueryRowContext(ctx, `SELECT id,name,state,priority,owner_id,COALESCE(team_id,''),spec_json,bypass_count,COALESCE(last_error,''),created_at,updated_at
         FROM jobs WHERE id=?`, id)
 	return scanJob(row)
 }
@@ -103,7 +103,7 @@ func (s *Store) ListJobsByState(ctx context.Context, states ...domain.JobState) 
 		placeholders[i] = "?"
 		args[i] = state
 	}
-	query := `SELECT id,name,state,priority,owner_id,COALESCE(team_id,''),spec_json,bypass_count,created_at,updated_at
+	query := `SELECT id,name,state,priority,owner_id,COALESCE(team_id,''),spec_json,bypass_count,COALESCE(last_error,''),created_at,updated_at
         FROM jobs WHERE state IN (` + strings.Join(placeholders, ",") + `) ORDER BY priority ASC, created_at ASC`
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -151,8 +151,14 @@ func (s *Store) ResetBypass(ctx context.Context, jobID string) error {
 	return err
 }
 
+func (s *Store) SetJobLastError(ctx context.Context, jobID, message string) error {
+	_, err := s.db.ExecContext(ctx, "UPDATE jobs SET last_error=?,updated_at=? WHERE id=?",
+		message, time.Now().UTC().Format(time.RFC3339Nano), jobID)
+	return err
+}
+
 func (s *Store) FindJobByIdempotency(ctx context.Context, ownerID, key string) (domain.Job, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id,name,state,priority,owner_id,COALESCE(team_id,''),spec_json,bypass_count,created_at,updated_at
+	row := s.db.QueryRowContext(ctx, `SELECT id,name,state,priority,owner_id,COALESCE(team_id,''),spec_json,bypass_count,COALESCE(last_error,''),created_at,updated_at
         FROM jobs WHERE owner_id=? AND idempotency_key=?`, ownerID, key)
 	return scanJob(row)
 }
@@ -175,7 +181,7 @@ func scanJob(row scanner) (domain.Job, error) {
 	var job domain.Job
 	var specJSON, createdAt, updatedAt string
 	err := row.Scan(&job.ID, &job.Name, &job.State, &job.Priority, &job.OwnerID, &job.TeamID,
-		&specJSON, &job.BypassCount, &createdAt, &updatedAt)
+		&specJSON, &job.BypassCount, &job.LastError, &createdAt, &updatedAt)
 	if err != nil {
 		return domain.Job{}, err
 	}

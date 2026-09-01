@@ -60,12 +60,13 @@ func (s *Store) GetUser(ctx context.Context, id string) (domain.UserAccount, err
 	return scanUserAccount(row)
 }
 
-func (s *Store) UpdateUser(ctx context.Context, id string, role domain.Role, teamID string, disabled bool) error {
+func (s *Store) UpdateUser(ctx context.Context, id string, role domain.Role, teamID, email string, disabled bool) error {
 	var disabledAt any
 	if disabled {
 		disabledAt = time.Now().UTC().Format(time.RFC3339Nano)
 	}
-	_, err := s.db.ExecContext(ctx, "UPDATE users SET role=?,team_id=?,disabled_at=? WHERE id=?", role, nullText(teamID), disabledAt, id)
+	_, err := s.db.ExecContext(ctx, "UPDATE users SET role=?,team_id=?,email=?,disabled_at=? WHERE id=?",
+		role, nullText(teamID), nullText(email), disabledAt, id)
 	return err
 }
 

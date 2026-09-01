@@ -66,6 +66,7 @@ func (s *Server) cancelJob(ctx context.Context, job domain.Job) error {
 		if err := s.store.TransitionJob(ctx, job.ID, domain.JobCanceled); err != nil {
 			return err
 		}
+		_ = s.store.SetJobLastError(ctx, job.ID, "已取消")
 		_ = s.store.ReleaseAllocations(ctx, job.ID)
 		return nil
 	case domain.JobCreating, domain.JobStarting:
@@ -76,6 +77,7 @@ func (s *Server) cancelJob(ctx context.Context, job domain.Job) error {
 		if err := s.store.TransitionJob(ctx, job.ID, domain.JobCanceled); err != nil {
 			return err
 		}
+		_ = s.store.SetJobLastError(ctx, job.ID, "已取消")
 		_ = s.store.ReleaseAllocations(ctx, job.ID)
 		return nil
 	case domain.JobRunning, domain.JobDrifted, domain.JobDegraded, domain.JobStopping:
@@ -106,6 +108,7 @@ func (s *Server) stopJob(ctx context.Context, job domain.Job, terminal domain.Jo
 	if err := s.store.TransitionJob(ctx, job.ID, terminal); err != nil {
 		return err
 	}
+	_ = s.store.SetJobLastError(ctx, job.ID, "已停止")
 	_ = s.store.ReleaseAllocations(ctx, job.ID)
 	_, _ = s.notifier.Publish(ctx, job.OwnerID, "warning", "任务已停止", job.Name)
 	return nil
@@ -115,6 +118,7 @@ func (s *Server) retryJob(ctx context.Context, job domain.Job) error {
 	if err := s.store.TransitionJob(ctx, job.ID, domain.JobQueued); err != nil {
 		return err
 	}
+	_ = s.store.SetJobLastError(ctx, job.ID, "")
 	_ = s.store.ResetBypass(ctx, job.ID)
 	go s.dispatchQueue(context.Background())
 	return nil

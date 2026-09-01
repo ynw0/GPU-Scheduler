@@ -128,12 +128,14 @@ func (s *Server) execute(ctx context.Context, reservation scheduler.ReservationR
 		s.failExecution(ctx, job.ID, attemptID, err)
 		return
 	}
+	_ = s.store.SetJobLastError(ctx, job.ID, "")
 	_, _ = s.notifier.Publish(ctx, job.OwnerID, "info", "任务已启动", job.Name+" 已进入运行状态。")
 	s.events.Publish("job", job.ID)
 }
 
 func (s *Server) failExecution(ctx context.Context, jobID, attemptID string, err error) {
 	s.log.Error("job execution failed", "job_id", jobID, "error", err)
+	_ = s.store.SetJobLastError(ctx, jobID, err.Error())
 	job, findErr := s.store.GetJob(ctx, jobID)
 	if findErr == nil && job.State != domain.JobFailed {
 		_ = s.store.TransitionJob(ctx, jobID, domain.JobFailed)
