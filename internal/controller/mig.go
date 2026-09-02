@@ -77,6 +77,7 @@ func (s *Server) applyMIGLayout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = s.store.InsertAudit(r.Context(), identityFrom(r.Context()).UserID, "gpu.mig", "gpu", gpuUUID, mig.FormatSlices(body.Profiles))
+	s.events.Publish("topology", layout)
 	writeJSON(w, 200, layout)
 }
 
@@ -128,6 +129,7 @@ func (s *Server) restoreOneMIGLayout(ctx context.Context, topology domain.Topolo
 		return fmt.Errorf("GPU %d 重建 MIG 失败: %w", gpu.Index, err)
 	}
 	s.log.Info("restored MIG layout", "gpu", layout.GPUUUID, "profiles", mig.FormatSlices(layout.Profiles))
+	s.events.Publish("topology", layout)
 	return nil
 }
 

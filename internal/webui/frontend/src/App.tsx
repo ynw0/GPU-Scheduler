@@ -80,6 +80,11 @@ export function App() {
     }
     source.addEventListener('job', refresh)
     source.addEventListener('metrics', () => { void queryClient.invalidateQueries({ queryKey: ['availability'] }) })
+    source.addEventListener('topology', () => {
+      void queryClient.invalidateQueries({ queryKey: ['topology'] })
+      void queryClient.invalidateQueries({ queryKey: ['availability'] })
+      void queryClient.invalidateQueries({ queryKey: ['mig-layouts'] })
+    })
     return () => source.close()
   }, [authenticated, queryClient])
 
@@ -305,7 +310,7 @@ function Overview({
   const freeGPUs = schedulable.filter((gpu) => freeGPUUUIDs.has(gpu.uuid)).length
   const stats = [
     { label: '运行任务', value: runningCount, suffix: 'RUNNING', icon: Activity, tone: 'green' },
-    { label: '可用 GPU', value: `${freeGPUs}/${schedulable.length}`, suffix: 'GPU / MIG', icon: Gauge, tone: 'cyan' },
+    { label: '可调度', value: `${freeGPUs}/${schedulable.length}`, suffix: 'GPU / MIG', icon: Gauge, tone: 'cyan' },
     { label: '可用线程', value: `${freeCPUIds.size}/${topology?.cpus.length ?? 0}`, suffix: 'LOGICAL CPU', icon: Cpu, tone: 'amber' },
     { label: '等待队列', value: queueCount, suffix: 'PENDING', icon: Clock3, tone: 'neutral' },
   ]
@@ -422,7 +427,7 @@ function GpuCard({ gpu, instances, freeGPUUUIDs }: { gpu: GPU; instances: GPU[];
         <ul className="mig-instances">
           {instances.map((item) => (
             <li key={item.uuid} className={freeGPUUUIDs.has(item.uuid) ? 'free' : 'allocated'}>
-              <span>{item.profile || item.uuid.slice(0, 8)}</span>
+              <span>GPU {item.index} · {item.profile || item.uuid.slice(0, 8)}</span>
               <span>{freeGPUUUIDs.has(item.uuid) ? 'FREE' : 'BUSY'}</span>
             </li>
           ))}

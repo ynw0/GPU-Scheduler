@@ -4,6 +4,22 @@ import { api } from './api'
 import { catalogForMemory, evaluateMig, maxCountFor, setProfileCount } from './migLayout'
 import type { GPU, MIGLayout } from './types'
 
+function sortedProfiles(values: string[]): string[] {
+  return [...values].filter(Boolean).sort()
+}
+
+function sameProfiles(live: string[], want: string[]): boolean {
+  const left = sortedProfiles(live)
+  const right = sortedProfiles(want)
+  return left.length === right.length && left.every((name, index) => name === right[index])
+}
+
+function layoutVisible(gpu: GPU, children: GPU[], enabled: boolean, profiles: string[]): boolean {
+  if (!enabled) return !gpu.migEnabled && children.length === 0
+  if (!gpu.migEnabled) return false
+  return sameProfiles(children.map((item) => item.profile || ''), profiles)
+}
+
 export function MigSettings() {
   const queryClient = useQueryClient()
   const topology = useQuery({ queryKey: ['topology'], queryFn: api.topology })
@@ -32,17 +48,42 @@ function MigCard({ gpu, children, saved, onApplied }: {
   saved?: MIGLayout
   onApplied: () => void
 }) {
+  const queryClient = useQueryClient()
   const catalog = useMemo(() => catalogForMemory(gpu.memoryBytes), [gpu.memoryBytes])
   const [slices, setSlices] = useState<string[]>(saved?.profiles ?? [])
+  const [expect, setExpect] = useState<{ enabled: boolean; profiles: string[] }>()
   useEffect(() => {
     setSlices(saved?.profiles ?? [])
   }, [gpu.uuid, saved?.enabled, (saved?.profiles ?? []).join(',')])
   const plan = evaluateMig(catalog, slices)
   const apply = useMutation({
     mutationFn: (enabled: boolean) => api.applyMigLayout(gpu.uuid, { enabled, profiles: enabled ? slices : [] }),
-    onSuccess: onApplied,
+    onMutate: () => { setExpect(undefined) },
+    onSuccess: (layout) => {
+      setExpect({ enabled: layout.enabled, profiles: layout.profiles ?? [] })
+      onApplied()
+    },
   })
+  const applying = apply.isPending
+  const matched = expect ? layoutVisible(gpu, children, expect.enabled, expect.profiles) : false
+  const waiting = Boolean(expect) && !applying && !matched
+  const done = Boolean(expect) && !applying && matched
   const live = gpu.migEnabled ? (children.length ? children.map((item) => item.profile || item.uuid.slice(0, 8)).join(' + ') : 'MIG 已开，尚无实例') : '整卡'
+
+  useEffect(() => {
+    if (!waiting) return
+    void queryClient.invalidateQueries({ queryKey: ['topology'] })
+    const started = Date.now()
+    const timer = window.setInterval(() => {
+      void queryClient.invalidateQueries({ queryKey: ['topology'] })
+      if (Date.now() - started >= 30_000) window.clearInterval(timer)
+    }, 2000)
+    return () => window.clearInterval(timer)
+  }, [waiting, queryClient, gpu.uuid])
+
+  const resultLabel = expect?.enabled
+    ? (expect.profiles.length ? expect.profiles.slice().sort().join(' + ') : 'MIG')
+    : '整卡'
 
   return (
     <div className="mig-card">
@@ -56,7 +97,7 @@ function MigCard({ gpu, children, saved, onApplied }: {
         {catalog.profiles.map((profile) => {
           const max = maxCountFor(catalog, slices, profile.name)
           const current = plan.counts.get(profile.name) ?? 0
-          const on = max > 0
+          const on = max > 0 && !applying
           return (
             <div key={profile.name} className={on ? 'resource-choice mig-profile' : 'resource-choice mig-profile disabled'}>
               <span>{profile.g}g</span>
@@ -86,12 +127,15 @@ function MigCard({ gpu, children, saved, onApplied }: {
           : <span className="muted">未选档位 = 保持或恢复整卡</span>}
       </div>
       <div className="mig-actions">
-        <button type="button" className="text-button" onClick={() => setSlices([])}>清空</button>
-        <button type="button" className="secondary-action" disabled={apply.isPending} onClick={() => apply.mutate(false)}>恢复整卡</button>
-        <button type="button" className="primary-action" disabled={apply.isPending || !slices.length} onClick={() => apply.mutate(true)}>
-          {apply.isPending ? '正在应用…' : '应用切分'}
+        <button type="button" className="text-button" disabled={applying} onClick={() => setSlices([])}>清空</button>
+        <button type="button" className="secondary-action" disabled={applying} onClick={() => apply.mutate(false)}>恢复整卡</button>
+        <button type="button" className="primary-action" disabled={applying || !slices.length} onClick={() => apply.mutate(true)}>
+          {applying ? '正在应用…' : '应用切分'}
         </button>
       </div>
+      {applying && <div className="field-hint">正在重置该卡并建实例，约 15–60 秒</div>}
+      {waiting && <div className="field-hint">切分已提交，等待拓扑发现实例…</div>}
+      {done && <div className="plan-status ok">已完成：{resultLabel}</div>}
       {apply.error && <div className="plan-conflict">{String(apply.error.message)}</div>}
     </div>
   )
