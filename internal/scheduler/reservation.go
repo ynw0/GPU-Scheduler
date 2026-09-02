@@ -102,7 +102,7 @@ func (s *ReservationService) Promote(ctx context.Context, job domain.Job, topolo
 	if !aggregate.Schedulable {
 		return ReservationResult{Job: job, Plan: aggregate, ServicePlans: servicePlans}, fmt.Errorf("resource plan is not schedulable")
 	}
-	if err := s.checkQuota(ctx, CreateInput{OwnerID: job.OwnerID, TeamID: job.TeamID, Spec: job.Spec}, aggregate); err != nil {
+	if err := s.checkQuota(ctx, CreateInput{OwnerID: job.OwnerID, TeamID: job.TeamID, Spec: job.Spec, Topology: topology}, aggregate); err != nil {
 		return ReservationResult{Job: job, Plan: aggregate}, err
 	}
 	now := time.Now().UTC()
@@ -147,19 +147,25 @@ func (s *ReservationService) checkQuota(ctx context.Context, input CreateInput, 
 	if err != nil {
 		return err
 	}
+	userUsage.GPUCount = GPUUnits(input.Topology, userUsage.GPUIds)
+	teamUsage.GPUCount = GPUUnits(input.Topology, teamUsage.GPUIds)
 	threads := len(plan.CPUIds)
 	if threads == 0 {
 		threads = requestedCPUThreads(input.Spec)
 	}
-	request := input.Spec.Resources
-	if input.Spec.Workload.Kind == domain.WorkloadCompose {
-		request = domain.ResourceRequest{}
-		for _, service := range input.Spec.Workload.Services {
-			request.GPUCount += service.Resources.GPUCount
-			request.MemoryBytes += service.Resources.MemoryBytes
-		}
+	requestedGPU := GPUUnits(input.Topology, plan.GPUUUIDs)
+	if requestedGPU == 0 {
+		requestedGPU = requestedGPUUnits(input.Spec)
 	}
-	conflicts := quota.Check(request, threads, teamLimit, userLimit, teamUsage, userUsage)
+	var memoryBytes uint64
+	if input.Spec.Workload.Kind == domain.WorkloadCompose {
+		for _, service := range input.Spec.Workload.Services {
+			memoryBytes += service.Resources.MemoryBytes
+		}
+	} else {
+		memoryBytes = input.Spec.Resources.MemoryBytes
+	}
+	conflicts := quota.Check(requestedGPU, threads, memoryBytes, teamLimit, userLimit, teamUsage, userUsage)
 	if len(conflicts) > 0 {
 		return fmt.Errorf("%s", conflicts[0])
 	}
@@ -333,8 +339,14 @@ func nodeCapacity(topology domain.Topology, nodeID int) uint64 {
 	return 0
 }
 
-func IntersectPool(availability domain.Availability, pool domain.ResourcePool) domain.Availability {
+func IntersectPool(availability domain.Availability, pool domain.ResourcePool, gpus []domain.GPU) domain.Availability {
 	cpuAllow, gpuAllow := intSet(pool.CPUIds), stringSet(pool.GPUUUIDs)
+	parentOf := make(map[string]string, len(gpus))
+	for _, gpu := range gpus {
+		if gpu.ParentUUID != "" {
+			parentOf[gpu.UUID] = gpu.ParentUUID
+		}
+	}
 	result := domain.Availability{MemoryByNUMA: make(map[int]uint64)}
 	for _, id := range availability.CPUIds {
 		if _, ok := cpuAllow[id]; ok {
@@ -344,6 +356,12 @@ func IntersectPool(availability domain.Availability, pool domain.ResourcePool) d
 	for _, uuid := range availability.GPUUUIDs {
 		if _, ok := gpuAllow[uuid]; ok {
 			result.GPUUUIDs = append(result.GPUUUIDs, uuid)
+			continue
+		}
+		if parent, ok := parentOf[uuid]; ok {
+			if _, ok := gpuAllow[parent]; ok {
+				result.GPUUUIDs = append(result.GPUUUIDs, uuid)
+			}
 		}
 	}
 	if len(pool.NUMANodes) == 0 {

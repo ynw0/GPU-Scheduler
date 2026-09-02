@@ -120,29 +120,27 @@ func (s *Store) QuotaUsage(ctx context.Context, ownerID, teamID string) (userUsa
 }
 
 func (s *Store) usage(ctx context.Context, column, id string) (quota.Usage, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT a.resource_type, COUNT(*), COALESCE(SUM(a.amount_bytes),0)
+	rows, err := s.db.QueryContext(ctx, `SELECT a.resource_type, a.resource_id, a.amount_bytes
         FROM allocations a JOIN jobs j ON j.id=a.job_id
-        WHERE a.state IN ('RESERVED','ACTIVE','RELEASING') AND j.`+column+`=?
-        GROUP BY a.resource_type`, id)
+        WHERE a.state IN ('RESERVED','ACTIVE','RELEASING') AND j.`+column+`=?`, id)
 	if err != nil {
 		return quota.Usage{}, err
 	}
 	defer rows.Close()
 	var usage quota.Usage
 	for rows.Next() {
-		var kind string
-		var count int
+		var kind, resourceID string
 		var bytes uint64
-		if err := rows.Scan(&kind, &count, &bytes); err != nil {
+		if err := rows.Scan(&kind, &resourceID, &bytes); err != nil {
 			return quota.Usage{}, err
 		}
 		switch kind {
 		case "gpu":
-			usage.GPUCount = count
+			usage.GPUIds = append(usage.GPUIds, resourceID)
 		case "cpu":
-			usage.CPUThreadCount = count
+			usage.CPUThreadCount++
 		case "memory_node":
-			usage.MemoryBytes = bytes
+			usage.MemoryBytes += bytes
 		}
 	}
 	return usage, rows.Err()

@@ -2,8 +2,6 @@ package quota
 
 import (
 	"fmt"
-
-	"gpu-scheduler/internal/domain"
 )
 
 type Limit struct {
@@ -14,12 +12,13 @@ type Limit struct {
 
 type Usage struct {
 	GPUCount       int
+	GPUIds         []string
 	CPUThreadCount int
 	MemoryBytes    uint64
 }
 
-func Check(request domain.ResourceRequest, plannedCPUThreads int, teamLimit, userLimit Limit, teamUsage, userUsage Usage) []string {
-	requested := Usage{GPUCount: request.GPUCount, CPUThreadCount: plannedCPUThreads, MemoryBytes: request.MemoryBytes}
+func Check(gpuUnits, plannedCPUThreads int, memoryBytes uint64, teamLimit, userLimit Limit, teamUsage, userUsage Usage) []string {
+	requested := Usage{GPUCount: gpuUnits, CPUThreadCount: plannedCPUThreads, MemoryBytes: memoryBytes}
 	var conflicts []string
 	conflicts = append(conflicts, checkScope("团队", teamLimit, teamUsage, requested)...)
 	conflicts = append(conflicts, checkScope("用户", userLimit, userUsage, requested)...)
@@ -29,7 +28,7 @@ func Check(request domain.ResourceRequest, plannedCPUThreads int, teamLimit, use
 func checkScope(scope string, limit Limit, usage, request Usage) []string {
 	var conflicts []string
 	if limit.GPUCount >= 0 && usage.GPUCount+request.GPUCount > limit.GPUCount {
-		conflicts = append(conflicts, fmt.Sprintf("%s GPU 配额不足", scope))
+		conflicts = append(conflicts, fmt.Sprintf("%s GPU 份额不足", scope))
 	}
 	if limit.CPUThreadCount >= 0 && usage.CPUThreadCount+request.CPUThreadCount > limit.CPUThreadCount {
 		conflicts = append(conflicts, fmt.Sprintf("%s CPU 配额不足", scope))

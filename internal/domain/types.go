@@ -69,6 +69,13 @@ const (
 	GPUManual GPUMode = "manual"
 )
 
+type GPUKind string
+
+const (
+	GPUKindWhole GPUKind = "whole"
+	GPUKindMIG   GPUKind = "mig"
+)
+
 type LogicalCPU struct {
 	ID          int   `json:"id"`
 	CoreID      int   `json:"coreId"`
@@ -132,11 +139,20 @@ type ResourceRequest struct {
 	CPUMode     CPUMode  `json:"cpuMode"`
 	CPUCount    int      `json:"cpuCount"`
 	CPUIds      []int    `json:"cpuIds,omitempty"`
+	GPUKind     GPUKind  `json:"gpuKind,omitempty"`
 	GPUMode     GPUMode  `json:"gpuMode"`
 	GPUCount    int      `json:"gpuCount"`
 	GPUUUIDs    []string `json:"gpuUuids,omitempty"`
+	MigProfile  string   `json:"migProfile,omitempty"`
 	MemoryBytes uint64   `json:"memoryBytes"`
 	NUMAPolicy  string   `json:"numaPolicy"`
+}
+
+func (r ResourceRequest) EffectiveGPUKind() GPUKind {
+	if r.GPUKind == GPUKindMIG {
+		return GPUKindMIG
+	}
+	return GPUKindWhole
 }
 
 type JobSpec struct {

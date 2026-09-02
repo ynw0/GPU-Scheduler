@@ -557,9 +557,11 @@ components:
         cpuMode: { type: string, enum: [auto-cores, manual-threads] }
         cpuCount: { type: integer, minimum: 0 }
         cpuIds: { type: array, items: { type: integer } }
+        gpuKind: { type: string, enum: [whole, mig] }
         gpuMode: { type: string, enum: [auto, manual] }
         gpuCount: { type: integer, minimum: 0 }
         gpuUuids: { type: array, items: { type: string } }
+        migProfile: { type: string }
         memoryBytes: { type: integer, minimum: 0 }
         numaPolicy: { const: strict }
     ImageWorkload:

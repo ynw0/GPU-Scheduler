@@ -4,10 +4,11 @@ import { Check, CircleGauge, Cpu, Gauge, HardDrive, LayoutGrid, X } from 'lucide
 import { api } from './api'
 import { cpuSelectable, selectedGPUNuma } from './numa'
 import { emptyImageFields, imageFieldsFromWorkload, JobImageFields, parseEnvironment, type ImageFields } from './JobImageFields'
+import { existingMigProfiles, gpuDeviceLabel, idleMigProfiles, migInstances, wholeGPUs } from './gpuLabel'
 import type { ImageWorkload, JobPlan, JobSpec, ResourceRequest, Topology, User } from './types'
 
 function emptyResources(): ResourceRequest {
-  return { cpuMode: 'auto-cores', cpuCount: 8, gpuMode: 'auto', gpuCount: 1, memoryBytes: 64 * 1024 ** 3, numaPolicy: 'strict' }
+  return { cpuMode: 'auto-cores', cpuCount: 8, gpuKind: 'whole', gpuMode: 'auto', gpuCount: 1, memoryBytes: 64 * 1024 ** 3, numaPolicy: 'strict' }
 }
 
 function specResources(spec?: JobSpec): ResourceRequest {
@@ -27,7 +28,12 @@ function clampPriority(role: User['role'] | undefined, priority: JobSpec['priori
   return priority
 }
 
-export function NewJobDialog({ topology, initialSpec, onClose }: { topology?: Topology; initialSpec?: JobSpec; onClose: () => void }) {
+export function NewJobDialog({ topology, freeGPUUUIDs, initialSpec, onClose }: {
+  topology?: Topology
+  freeGPUUUIDs?: Set<string>
+  initialSpec?: JobSpec
+  onClose: () => void
+}) {
   const queryClient = useQueryClient()
   const me = useQuery({ queryKey: ['me'], queryFn: api.me, refetchInterval: false })
   const images = useQuery({ queryKey: ['images'], queryFn: api.images, refetchInterval: false })
@@ -54,8 +60,10 @@ export function NewJobDialog({ topology, initialSpec, onClose }: { topology?: To
   const [activeTemplateId, setActiveTemplateId] = useState('')
   const [activeTemplateName, setActiveTemplateName] = useState('')
   const [stopGraceSeconds, setStopGraceSeconds] = useState(initialSpec?.stopGraceSeconds || 30)
+  const [gpuKind, setGpuKind] = useState<NonNullable<ResourceRequest['gpuKind']>>(seed.gpuKind === 'mig' ? 'mig' : 'whole')
   const [gpuMode, setGpuMode] = useState<ResourceRequest['gpuMode']>(seed.gpuMode)
   const [gpuCount, setGpuCount] = useState(seed.gpuCount)
+  const [migProfile, setMigProfile] = useState(seed.migProfile ?? '')
   const [selectedGPUs, setSelectedGPUs] = useState<string[]>(seed.gpuUuids ?? [])
   const [cpuMode, setCpuMode] = useState<ResourceRequest['cpuMode']>(seed.cpuMode)
   const [cpuCount, setCpuCount] = useState(seed.cpuCount)
@@ -67,8 +75,11 @@ export function NewJobDialog({ topology, initialSpec, onClose }: { topology?: To
   const resources = (): ResourceRequest => ({
     cpuMode, cpuCount: cpuMode === 'manual-threads' ? selectedCPUs.length : cpuCount,
     cpuIds: cpuMode === 'manual-threads' ? selectedCPUs : undefined,
-    gpuMode, gpuCount: gpuMode === 'manual' ? selectedGPUs.length : gpuCount,
+    gpuKind,
+    gpuMode,
+    gpuCount: gpuKind === 'mig' ? 1 : gpuMode === 'manual' ? selectedGPUs.length : gpuCount,
     gpuUuids: gpuMode === 'manual' ? selectedGPUs : undefined,
+    ...(gpuKind === 'mig' ? { migProfile } : {}),
     memoryBytes: memoryGB * 1024 ** 3, numaPolicy: 'strict',
   })
 
@@ -114,8 +125,10 @@ export function NewJobDialog({ topology, initialSpec, onClose }: { topology?: To
     setKind(spec.workload.kind)
     setResourcePoolId(spec.resourcePoolId ?? '')
     setStopGraceSeconds(spec.stopGraceSeconds || 30)
+    setGpuKind(next.gpuKind === 'mig' ? 'mig' : 'whole')
     setGpuMode(next.gpuMode)
     setGpuCount(next.gpuCount)
+    setMigProfile(next.migProfile ?? '')
     setSelectedGPUs(next.gpuUuids ?? [])
     setCpuMode(next.cpuMode)
     setCpuCount(next.cpuCount)
@@ -191,6 +204,12 @@ export function NewJobDialog({ topology, initialSpec, onClose }: { topology?: To
 
   const toggleGPU = (uuid: string) => {
     setSelectedGPUs((current) => {
+      if (gpuKind === 'mig') {
+        const next = current.includes(uuid) ? [] : [uuid]
+        const picked = (topology?.gpus ?? []).find((gpu) => gpu.uuid === (next[0] ?? ''))
+        if (picked?.profile) setMigProfile(picked.profile)
+        return next
+      }
       const next = current.includes(uuid) ? current.filter((item) => item !== uuid) : [...current, uuid]
       const numa = selectedGPUNuma(topology, next)
       setSelectedCPUs((cpus) => cpus.filter((id) => {
@@ -203,9 +222,14 @@ export function NewJobDialog({ topology, initialSpec, onClose }: { topology?: To
   }
   const toggleCPU = (id: number) => setSelectedCPUs((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
   const composeReady = composeInput === 'catalog' ? composeSourceId : composeInput === 'path' ? composePath.trim() : composeContent.trim()
-  const ready = name.trim() && (kind === 'image' ? imageFields.image && memoryGB > 0 : composeReady && serviceName.trim() && memoryGB > 0)
+  const ready = Boolean(name.trim()) && (gpuKind !== 'mig' || Boolean(migProfile)) && (kind === 'image' ? imageFields.image && memoryGB > 0 : composeReady && serviceName.trim() && memoryGB > 0)
   const planCurrent = planKey === fingerprint()
   const allowedNuma = gpuMode === 'manual' ? selectedGPUNuma(topology, selectedGPUs) : new Set<number>()
+  const cards = wholeGPUs(topology?.gpus ?? [])
+  const instances = migInstances(topology?.gpus ?? [])
+  const freeSet = freeGPUUUIDs ?? new Set(instances.map((item) => item.uuid))
+  const profiles = existingMigProfiles(topology?.gpus ?? [])
+  const idleProfiles = idleMigProfiles(topology?.gpus ?? [], freeSet)
 
   return (
     <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
@@ -301,9 +325,26 @@ export function NewJobDialog({ topology, initialSpec, onClose }: { topology?: To
             </fieldset>
             <fieldset>
               <legend>02 / GPU 与 NUMA</legend>
-              <div className="mode-switch"><button className={gpuMode === 'auto' ? 'active' : ''} onClick={() => { setGpuMode('auto'); setPlan(undefined) }}>自动分配</button><button className={gpuMode === 'manual' ? 'active' : ''} onClick={() => { setGpuMode('manual'); setPlan(undefined) }}>手动整卡</button></div>
-              {gpuMode === 'auto' ? <label>GPU 数量<input type="number" min={0} max={(topology?.gpus ?? []).filter((gpu) => !gpu.parentUuid && !gpu.migEnabled).length} value={gpuCount} onChange={(event) => setGpuCount(Number(event.target.value))} /></label> :
-                <div className="resource-choice-grid">{(topology?.gpus ?? []).filter((gpu) => !gpu.parentUuid && !gpu.migEnabled).map((gpu) => <button key={gpu.uuid} className={selectedGPUs.includes(gpu.uuid) ? 'resource-choice selected' : 'resource-choice'} onClick={() => toggleGPU(gpu.uuid)}><span>GPU {gpu.index}</span><small>NUMA {gpu.numaNode}</small>{selectedGPUs.includes(gpu.uuid) && <Check size={14} />}</button>)}</div>}
+              <div className="mode-switch">
+                <button className={gpuKind === 'whole' ? 'active' : ''} onClick={() => { setGpuKind('whole'); setGpuMode('auto'); setSelectedGPUs([]); setMigProfile(''); setPlan(undefined) }}>整卡</button>
+                <button className={gpuKind === 'mig' ? 'active' : ''} onClick={() => { setGpuKind('mig'); setGpuMode('auto'); setGpuCount(1); setSelectedGPUs([]); setPlan(undefined) }}>MIG</button>
+              </div>
+              {gpuKind === 'whole' ? <>
+                <div className="mode-switch"><button className={gpuMode === 'auto' ? 'active' : ''} onClick={() => { setGpuMode('auto'); setPlan(undefined) }}>自动分配</button><button className={gpuMode === 'manual' ? 'active' : ''} onClick={() => { setGpuMode('manual'); setPlan(undefined) }}>手动整卡</button></div>
+                {gpuMode === 'auto' ? <label>GPU 数量<input type="number" min={0} max={cards.length} value={gpuCount} onChange={(event) => setGpuCount(Number(event.target.value))} /></label> :
+                  <div className="resource-choice-grid">{cards.map((gpu) => <button key={gpu.uuid} className={selectedGPUs.includes(gpu.uuid) ? 'resource-choice selected' : 'resource-choice'} onClick={() => toggleGPU(gpu.uuid)}><span>GPU {gpu.index}</span><small>NUMA {gpu.numaNode}</small>{selectedGPUs.includes(gpu.uuid) && <Check size={14} />}</button>)}</div>}
+              </> : <>
+                <div className="mode-switch"><button className={gpuMode === 'auto' ? 'active' : ''} onClick={() => { setGpuMode('auto'); setSelectedGPUs([]); setPlan(undefined) }}>自动订 1 片</button><button className={gpuMode === 'manual' ? 'active' : ''} onClick={() => { setGpuMode('manual'); setPlan(undefined) }}>点选实例</button></div>
+                <label>档位<select value={migProfile} onChange={(event) => { setMigProfile(event.target.value); setSelectedGPUs([]); setPlan(undefined) }}>
+                  <option value="">选择档位</option>
+                  {profiles.map((name) => <option key={name} value={name}>{name}</option>)}
+                </select></label>
+                {gpuMode === 'manual' && <div className="resource-choice-grid">{instances.filter((gpu) => !migProfile || gpu.profile === migProfile).map((gpu) => {
+                  const free = freeSet.has(gpu.uuid)
+                  return <button key={gpu.uuid} disabled={!free} className={selectedGPUs.includes(gpu.uuid) ? 'resource-choice selected' : 'resource-choice'} onClick={() => toggleGPU(gpu.uuid)}><span>GPU {gpu.index} · {gpu.profile}</span><small>{free ? '空闲' : '占用'}</small>{selectedGPUs.includes(gpu.uuid) && <Check size={14} />}</button>
+                })}</div>}
+                {gpuKind === 'mig' && !idleProfiles.length && <small className="field-hint">当前没有空闲 MIG 实例，选择档位后任务将进入队列。</small>}
+              </>}
             </fieldset>
             <fieldset>
               <legend>03 / CPU</legend>
@@ -322,7 +363,7 @@ export function NewJobDialog({ topology, initialSpec, onClose }: { topology?: To
             {!plan && <div className="plan-empty"><CircleGauge size={30} /><span>填写资源后执行预检。资源不足时任务会进入队列。</span></div>}
             {plan && <>
               <div className={plan.schedulable ? 'plan-status ok' : 'plan-status error'}>{plan.schedulable ? <Check size={17} /> : <X size={17} />}{plan.schedulable ? '资源可立即调度' : '将进入排队'}</div>
-              <div className="plan-line"><span><Gauge size={15} />GPU</span><strong>{plan.gpuUuids.length ? `${plan.gpuUuids.length} 张整卡` : '无'}</strong></div>
+              <div className="plan-line"><span><Gauge size={15} />GPU</span><strong>{plan.gpuUuids.length ? plan.gpuUuids.map((uuid) => gpuDeviceLabel(topology, uuid)).join('、') : '无'}</strong></div>
               <div className="plan-line"><span><Cpu size={15} />CPU</span><strong>{`${plan.cpuIds.length} 线程`}</strong></div>
               <div className="plan-line"><span><LayoutGrid size={15} />NUMA</span><strong>{plan.numaNodes.join(', ') || '—'}</strong></div>
               <div className="plan-line"><span><HardDrive size={15} />内存</span><strong>{`${memoryGB} GB`}</strong></div>

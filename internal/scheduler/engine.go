@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"gpu-scheduler/internal/domain"
+	"gpu-scheduler/internal/mig"
 )
 
 type Engine struct{}
@@ -54,12 +55,15 @@ func (e *Engine) Plan(topology domain.Topology, availability domain.Availability
 }
 
 func selectGPUs(gpus []domain.GPU, available map[string]struct{}, request domain.ResourceRequest) ([]domain.GPU, []string) {
+	if request.EffectiveGPUKind() == domain.GPUKindMIG {
+		return selectMIGInstance(gpus, available, request)
+	}
 	if request.GPUCount == 0 {
 		return nil, nil
 	}
 	byUUID := make(map[string]domain.GPU, len(gpus))
 	for _, gpu := range gpus {
-		if gpu.MigEnabled || gpu.ParentUUID != "" {
+		if !isWholeCard(gpu) {
 			continue
 		}
 		byUUID[gpu.UUID] = gpu
@@ -72,7 +76,7 @@ func selectGPUs(gpus []domain.GPU, available map[string]struct{}, request domain
 		for _, uuid := range request.GPUUUIDs {
 			gpu, exists := byUUID[uuid]
 			if !exists {
-				return nil, []string{fmt.Sprintf("GPU %s 不存在", uuid)}
+				return nil, []string{fmt.Sprintf("GPU %s 不是可分配的整卡", uuid)}
 			}
 			if _, free := available[uuid]; !free || !gpu.Healthy {
 				return nil, []string{fmt.Sprintf("GPU %s 当前不可分配", uuid)}
@@ -83,7 +87,7 @@ func selectGPUs(gpus []domain.GPU, available map[string]struct{}, request domain
 	}
 	candidates := make([]domain.GPU, 0)
 	for _, gpu := range gpus {
-		if gpu.MigEnabled || gpu.ParentUUID != "" {
+		if !isWholeCard(gpu) {
 			continue
 		}
 		_, free := available[gpu.UUID]
@@ -107,6 +111,113 @@ func selectGPUs(gpus []domain.GPU, available map[string]struct{}, request domain
 		return 0
 	})
 	return combinations[0], nil
+}
+
+func selectMIGInstance(gpus []domain.GPU, available map[string]struct{}, request domain.ResourceRequest) ([]domain.GPU, []string) {
+	profile := request.MigProfile
+	if !mig.KnownProfile(profile) {
+		return nil, []string{"MIG 任务必须指定合法档位"}
+	}
+	byUUID := make(map[string]domain.GPU, len(gpus))
+	candidates := make([]domain.GPU, 0)
+	for _, gpu := range gpus {
+		if gpu.ParentUUID == "" {
+			continue
+		}
+		byUUID[gpu.UUID] = gpu
+		if gpu.Profile != profile || !gpu.Healthy {
+			continue
+		}
+		if _, free := available[gpu.UUID]; free {
+			candidates = append(candidates, gpu)
+		}
+	}
+	if request.GPUMode == domain.GPUManual {
+		if len(request.GPUUUIDs) != 1 {
+			return nil, []string{"MIG 手动模式必须点选 1 个实例"}
+		}
+		gpu, exists := byUUID[request.GPUUUIDs[0]]
+		if !exists {
+			return nil, []string{fmt.Sprintf("%s 不是 MIG 实例", request.GPUUUIDs[0])}
+		}
+		if gpu.Profile != profile {
+			return nil, []string{fmt.Sprintf("实例档位是 %s，与请求 %s 不一致", gpu.Profile, profile)}
+		}
+		if _, free := available[gpu.UUID]; !free || !gpu.Healthy {
+			return nil, []string{fmt.Sprintf("MIG 实例 %s 当前不可分配", gpu.UUID)}
+		}
+		return []domain.GPU{gpu}, nil
+	}
+	if len(candidates) == 0 {
+		return nil, []string{fmt.Sprintf("可用 %s 实例不足", profile)}
+	}
+	slices.SortFunc(candidates, func(a, b domain.GPU) int {
+		if value := cmp.Compare(a.Index, b.Index); value != 0 {
+			return value
+		}
+		return cmp.Compare(a.UUID, b.UUID)
+	})
+	return []domain.GPU{candidates[0]}, nil
+}
+
+func isWholeCard(gpu domain.GPU) bool {
+	return !gpu.MigEnabled && gpu.ParentUUID == ""
+}
+
+func ValidateResourceRequest(request domain.ResourceRequest) error {
+	kind := request.EffectiveGPUKind()
+	if request.GPUKind != "" && request.GPUKind != domain.GPUKindWhole && request.GPUKind != domain.GPUKindMIG {
+		return fmt.Errorf("gpuKind 只支持 whole 或 mig")
+	}
+	if kind == domain.GPUKindWhole && request.MigProfile != "" {
+		return fmt.Errorf("整卡任务不能填写 migProfile")
+	}
+	if kind == domain.GPUKindMIG && !mig.KnownProfile(request.MigProfile) {
+		return fmt.Errorf("MIG 任务必须指定合法档位")
+	}
+	if kind == domain.GPUKindMIG && request.GPUMode == domain.GPUManual && len(request.GPUUUIDs) != 1 {
+		return fmt.Errorf("MIG 手动模式必须点选 1 个实例")
+	}
+	return nil
+}
+
+func GPUUnits(topology domain.Topology, uuids []string) int {
+	byUUID := make(map[string]domain.GPU, len(topology.GPUs))
+	for _, gpu := range topology.GPUs {
+		byUUID[gpu.UUID] = gpu
+	}
+	total := 0
+	for _, uuid := range uuids {
+		gpu, ok := byUUID[uuid]
+		if !ok {
+			total += mig.TotalG
+			continue
+		}
+		total += mig.Units(gpu)
+	}
+	return total
+}
+
+func requestedGPUUnits(spec domain.JobSpec) int {
+	if spec.Workload.Kind == domain.WorkloadCompose {
+		total := 0
+		for _, service := range spec.Workload.Services {
+			total += requestGPUUnits(service.Resources)
+		}
+		return total
+	}
+	return requestGPUUnits(spec.Resources)
+}
+
+func requestGPUUnits(request domain.ResourceRequest) int {
+	if request.EffectiveGPUKind() == domain.GPUKindMIG {
+		g, ok := mig.ProfileG(request.MigProfile)
+		if !ok {
+			return 0
+		}
+		return g
+	}
+	return request.GPUCount * mig.TotalG
 }
 
 func selectCPUs(cpus []domain.LogicalCPU, available map[int]struct{}, allowedNodes map[int]struct{}, request domain.ResourceRequest) ([]int, map[int]struct{}, []string) {

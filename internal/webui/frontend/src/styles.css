@@ -123,6 +123,10 @@ h1 { font-size: 25px; margin-bottom: 0; letter-spacing: -.025em; font-weight: 60
 .meter { height: 3px; background: #d5e0da; margin: 6px 0 8px; overflow: hidden; }
 .meter i { display: block; height: 100%; background: var(--green); }
 .gpu-card.allocated .meter i { background: var(--amber); }
+.mig-instances { list-style: none; margin: 8px 0 10px; padding: 0; display: grid; gap: 4px; }
+.mig-instances li { display: flex; justify-content: space-between; align-items: center; padding: 3px 6px; border: 1px solid var(--line-soft); font: 10px 'Cascadia Mono', 'JetBrains Mono', monospace; color: var(--muted); }
+.mig-instances li.free { color: var(--green); border-color: #9dcfb2; background: #e8f6ee; }
+.mig-instances li.allocated { color: var(--amber); border-color: #e0b48a; background: #fff6ec; }
 .cpu-section { padding: 11px; }
 .cpu-section-title { display: flex; justify-content: space-between; color: var(--muted); font: 11px 'Cascadia Mono', 'JetBrains Mono', monospace; margin-bottom: 9px; }
 .core-grid { display: grid; grid-template-columns: repeat(8, minmax(24px, 1fr)); gap: 5px; }
@@ -254,7 +258,7 @@ h1 { font-size: 25px; margin-bottom: 0; letter-spacing: -.025em; font-weight: 60
 .resource-choice-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 7px; }
 .resource-choice { min-height: 56px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); position: relative; cursor: pointer; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; padding: 0 10px; }
 .resource-choice span { font: 600 12px 'Cascadia Mono', monospace; color: var(--text); }.resource-choice small { color: var(--muted); font-size: 11px; margin-top: 4px; }.resource-choice svg { position: absolute; right: 8px; top: 8px; }
-.resource-choice.disabled { opacity: .35; cursor: not-allowed; }
+.resource-choice.disabled, .resource-choice:disabled { opacity: .35; cursor: not-allowed; }
 .mig-settings { display: flex; flex-direction: column; gap: 16px; padding: 0 20px 28px; }
 .mig-card { border: 1px solid var(--line); background: var(--panel); padding: 16px; }
 .mig-card-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 8px; }

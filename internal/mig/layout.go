@@ -3,6 +3,8 @@ package mig
 import (
 	"fmt"
 	"strings"
+
+	"gpu-scheduler/internal/domain"
 )
 
 const TotalG = 7
@@ -43,6 +45,30 @@ var (
 		},
 	}
 )
+
+func ProfileG(name string) (int, bool) {
+	if profile, ok := family80.ByName(name); ok {
+		return profile.G, true
+	}
+	if profile, ok := family40.ByName(name); ok {
+		return profile.G, true
+	}
+	return 0, false
+}
+
+func KnownProfile(name string) bool {
+	_, ok := ProfileG(name)
+	return ok
+}
+
+func Units(gpu domain.GPU) int {
+	if gpu.ParentUUID != "" {
+		if g, ok := ProfileG(gpu.Profile); ok {
+			return g
+		}
+	}
+	return TotalG
+}
 
 func CatalogForMemory(memoryBytes uint64) Catalog {
 	if memoryBytes >= 60*1024*1024*1024 {

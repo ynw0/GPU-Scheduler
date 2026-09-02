@@ -243,7 +243,7 @@ func (s *Server) availabilityForSpec(ctx context.Context, spec domain.JobSpec) (
 	if err != nil {
 		return domain.Topology{}, domain.Availability{}, err
 	}
-	return topology, scheduler.IntersectPool(availability, pool), nil
+	return topology, scheduler.IntersectPool(availability, pool, topology.GPUs), nil
 }
 
 func (s *Server) liveTopology(ctx context.Context) (domain.Topology, error) {
@@ -309,6 +309,11 @@ func validateJobSpec(spec domain.JobSpec, identity auth.Identity) error {
 		if len(spec.Workload.Services) == 0 {
 			return errors.New("Compose 至少需要一个已分类服务")
 		}
+		for _, service := range spec.Workload.Services {
+			if err := scheduler.ValidateResourceRequest(service.Resources); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 	if spec.Workload.Kind != domain.WorkloadImage {
@@ -338,7 +343,7 @@ func validateJobSpec(spec domain.JobSpec, identity auth.Identity) error {
 	if err := domain.ValidateDockerNetwork(spec.Workload.Network); err != nil {
 		return err
 	}
-	return nil
+	return scheduler.ValidateResourceRequest(spec.Resources)
 }
 
 func normalizeJobSpec(spec *domain.JobSpec) {
@@ -350,6 +355,19 @@ func normalizeJobSpec(spec *domain.JobSpec) {
 	}
 	if spec.Workload.Kind == "" {
 		spec.Workload.Kind = domain.WorkloadImage
+	}
+	normalizeResources(&spec.Resources)
+	for i := range spec.Workload.Services {
+		normalizeResources(&spec.Workload.Services[i].Resources)
+	}
+}
+
+func normalizeResources(request *domain.ResourceRequest) {
+	if request.GPUKind == "" {
+		request.GPUKind = domain.GPUKindWhole
+	}
+	if request.GPUKind == domain.GPUKindMIG {
+		request.GPUCount = 1
 	}
 }
 

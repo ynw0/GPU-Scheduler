@@ -34,8 +34,9 @@ func BuildAvailability(topology domain.Topology, allocations []domain.Allocation
 			availability.CPUIds = append(availability.CPUIds, cpu.ID)
 		}
 	}
+	expandBlockedGPUs(topology.GPUs, blockedGPUs)
 	for _, gpu := range topology.GPUs {
-		if gpu.MigEnabled || gpu.ParentUUID != "" {
+		if gpu.MigEnabled && gpu.ParentUUID == "" {
 			continue
 		}
 		_, blocked := blockedGPUs[gpu.UUID]
@@ -51,4 +52,15 @@ func BuildAvailability(topology domain.Topology, allocations []domain.Allocation
 		}
 	}
 	return availability
+}
+
+func expandBlockedGPUs(gpus []domain.GPU, blocked map[string]struct{}) {
+	for _, gpu := range gpus {
+		if gpu.ParentUUID == "" {
+			continue
+		}
+		if _, parentBlocked := blocked[gpu.ParentUUID]; parentBlocked {
+			blocked[gpu.UUID] = struct{}{}
+		}
+	}
 }

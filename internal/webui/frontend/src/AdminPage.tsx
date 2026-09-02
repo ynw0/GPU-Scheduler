@@ -20,7 +20,7 @@ export function AdminPage({ role }: { role: User['role'] }) {
   const [userCreated, setUserCreated] = useState('')
   const [teamName, setTeamName] = useState('')
   const [sourceForm, setSourceForm] = useState({ name: '', rootPath: '', entryFile: 'compose.yaml' })
-  const [quotaForm, setQuotaForm] = useState({ scopeType: 'user' as 'user' | 'team', scopeId: '', gpuLimit: 4, cpuThreadLimit: 32, memoryGB: 256 })
+  const [quotaForm, setQuotaForm] = useState({ scopeType: 'user' as 'user' | 'team', scopeId: '', gpuLimit: 7, cpuThreadLimit: 32, memoryGB: 256 })
   const [poolName, setPoolName] = useState('')
   const [poolShared, setPoolShared] = useState(false)
   const [poolGPUs, setPoolGPUs] = useState<string[]>([])
@@ -184,14 +184,14 @@ export function AdminPage({ role }: { role: User['role'] }) {
                 ? (users.data ?? []).map((user) => <option key={user.id} value={user.id}>{user.username}</option>)
                 : (teams.data ?? []).map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
             </select></label>
-            <label>GPU 上限<input type="number" min={0} value={quotaForm.gpuLimit} onChange={(event) => setQuotaForm({ ...quotaForm, gpuLimit: Number(event.target.value) })} /></label>
+            <label>GPU 份额（g）<input type="number" min={0} value={quotaForm.gpuLimit} onChange={(event) => setQuotaForm({ ...quotaForm, gpuLimit: Number(event.target.value) })} /></label>
             <label>CPU 线程上限<input type="number" min={0} value={quotaForm.cpuThreadLimit} onChange={(event) => setQuotaForm({ ...quotaForm, cpuThreadLimit: Number(event.target.value) })} /></label>
             <label>内存上限（GB）<input type="number" min={1} value={quotaForm.memoryGB} onChange={(event) => setQuotaForm({ ...quotaForm, memoryGB: Number(event.target.value) })} /></label>
             <button className="primary-action" type="submit" disabled={!quotaForm.scopeId || saveQuota.isPending}>{saveQuota.isPending ? '正在保存…' : '保存配额'}</button>
             {saveQuota.error && <div className="plan-conflict">{String(saveQuota.error.message)}</div>}
           </form>
           <div className="full-job-table">
-            <div className="full-job-row header"><span>对象</span><span>范围</span><span>GPU</span><span>CPU</span><span>内存</span></div>
+            <div className="full-job-row header"><span>对象</span><span>范围</span><span>份额(g)</span><span>CPU</span><span>内存</span></div>
             {(quotas.data ?? []).map((item) => {
               const label = item.scopeType === 'user'
                 ? (users.data ?? []).find((user) => user.id === item.scopeId)?.username
@@ -203,7 +203,7 @@ export function AdminPage({ role }: { role: User['role'] }) {
                 })}>
                   <span>{label || item.scopeId.slice(0, 8)}</span>
                   <span>{item.scopeType === 'user' ? '用户' : '团队'}</span>
-                  <span>{item.gpuLimit} GPU</span>
+                  <span>{item.gpuLimit} g</span>
                   <span>{item.cpuThreadLimit} CPU</span>
                   <span>{(item.memoryBytesLimit / 1024 ** 3).toFixed(0)} GB</span>
                 </div>
@@ -245,7 +245,7 @@ export function AdminPage({ role }: { role: User['role'] }) {
           <form className="admin-form" onSubmit={(event) => { event.preventDefault(); createPool.mutate() }}>
             <label>名称<input value={poolName} onChange={(event) => setPoolName(event.target.value)} /></label>
             <label className="checkbox-row"><input type="checkbox" checked={poolShared} onChange={(event) => setPoolShared(event.target.checked)} />共享池</label>
-            <div className="resource-choice-grid">{(topology.data?.gpus ?? []).filter((gpu) => !gpu.parentUuid && !gpu.migEnabled).map((gpu) => (
+            <div className="resource-choice-grid">{(topology.data?.gpus ?? []).filter((gpu) => !gpu.parentUuid).map((gpu) => (
               <button type="button" key={gpu.uuid} className={poolGPUs.includes(gpu.uuid) ? 'resource-choice selected' : 'resource-choice'} onClick={() => togglePoolGPU(gpu.uuid)}>
                 <span>GPU {gpu.index}</span><small>NUMA {gpu.numaNode}</small>
               </button>

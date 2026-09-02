@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"gpu-scheduler/internal/agentapi"
@@ -24,16 +26,19 @@ const sessionCookie = "gpu_scheduler_session"
 type identityKey struct{}
 
 type Server struct {
-	log          *slog.Logger
-	cfg          config.Config
-	store        *store.Store
-	agent        *agentapi.Client
-	auth         *auth.Service
-	scheduler    *scheduler.Engine
-	reservations *scheduler.ReservationService
-	notifier     *notification.Worker
-	events       *Hub
-	mux          *http.ServeMux
+	log              *slog.Logger
+	cfg              config.Config
+	store            *store.Store
+	agent            *agentapi.Client
+	auth             *auth.Service
+	scheduler        *scheduler.Engine
+	reservations     *scheduler.ReservationService
+	notifier         *notification.Worker
+	events           *Hub
+	mux              *http.ServeMux
+	migRestoreBusy   atomic.Bool
+	migRestoreMu     sync.Mutex
+	migRestoreErrors []string
 }
 
 func New(log *slog.Logger, cfg config.Config, database *store.Store, agent *agentapi.Client, authService *auth.Service, notifier *notification.Worker) *Server {
@@ -171,6 +176,12 @@ func (s *Server) getHealth(w http.ResponseWriter, r *http.Request) {
 	} else {
 		warnings = agentWarnings
 	}
+	s.migRestoreMu.Lock()
+	warnings = append(warnings, s.migRestoreErrors...)
+	if len(s.migRestoreErrors) > 0 && status == "ok" {
+		status = "degraded"
+	}
+	s.migRestoreMu.Unlock()
 	writeJSON(w, 200, map[string]any{"status": status, "version": "dev", "agent": agentStatus, "warnings": warnings})
 }
 

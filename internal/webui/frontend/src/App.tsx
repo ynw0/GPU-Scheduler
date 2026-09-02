@@ -207,6 +207,7 @@ export function App() {
       {newJobOpen && (
         <NewJobDialog
           topology={topology.data}
+          freeGPUUUIDs={new Set(availability.data?.gpuUuids ?? [])}
           initialSpec={jobDraft}
           onClose={() => { setNewJobOpen(false); setJobDraft(undefined) }}
         />
@@ -225,6 +226,7 @@ export function App() {
       {selectedJob.data && (
         <JobDetail
           job={selectedJob.data}
+          topology={topology.data}
           canWrite={canWrite}
           onClose={() => setSelectedJobId(undefined)}
           onAction={(name) => action.mutate({ id: selectedJob.data!.id, name })}
@@ -299,10 +301,11 @@ function Overview({
   onOpenJob: (id: string) => void
 }) {
   const totalMemory = topology?.numaNodes.reduce((sum, node) => sum + node.memoryBytes, 0) ?? 0
-  const freeGPUs = topology?.gpus.filter((gpu) => freeGPUUUIDs.has(gpu.uuid)).length ?? 0
+  const schedulable = topology?.gpus.filter((gpu) => !gpu.migEnabled || gpu.parentUuid) ?? []
+  const freeGPUs = schedulable.filter((gpu) => freeGPUUUIDs.has(gpu.uuid)).length
   const stats = [
     { label: '运行任务', value: runningCount, suffix: 'RUNNING', icon: Activity, tone: 'green' },
-    { label: '可用 GPU', value: `${freeGPUs}/${topology?.gpus.length ?? 0}`, suffix: 'WHOLE GPU', icon: Gauge, tone: 'cyan' },
+    { label: '可用 GPU', value: `${freeGPUs}/${schedulable.length}`, suffix: 'GPU / MIG', icon: Gauge, tone: 'cyan' },
     { label: '可用线程', value: `${freeCPUIds.size}/${topology?.cpus.length ?? 0}`, suffix: 'LOGICAL CPU', icon: Cpu, tone: 'amber' },
     { label: '等待队列', value: queueCount, suffix: 'PENDING', icon: Clock3, tone: 'neutral' },
   ]
@@ -336,6 +339,7 @@ function Overview({
               node={node}
               cpus={(topology?.cpus ?? []).filter((cpu) => cpu.numaNode === node.id)}
               gpus={(topology?.gpus ?? []).filter((gpu) => gpu.numaNode === node.id && !gpu.parentUuid)}
+              instances={(topology?.gpus ?? []).filter((gpu) => gpu.numaNode === node.id && Boolean(gpu.parentUuid))}
               freeCPUIds={freeCPUIds}
               freeGPUUUIDs={freeGPUUUIDs}
             />
@@ -366,10 +370,11 @@ function Overview({
   )
 }
 
-function NumaCard({ node, cpus, gpus, freeCPUIds, freeGPUUUIDs }: {
+function NumaCard({ node, cpus, gpus, instances, freeCPUIds, freeGPUUUIDs }: {
   node: NUMANode
   cpus: LogicalCPU[]
   gpus: GPU[]
+  instances: GPU[]
   freeCPUIds: Set<number>
   freeGPUUUIDs: Set<string>
 }) {
@@ -386,7 +391,7 @@ function NumaCard({ node, cpus, gpus, freeCPUIds, freeGPUUUIDs }: {
         <span className="node-health">HEALTHY</span>
       </header>
       <div className="gpu-lane">
-        {gpus.map((gpu) => <GpuCard key={gpu.uuid} gpu={gpu} free={freeGPUUUIDs.has(gpu.uuid)} />)}
+        {gpus.map((gpu) => <GpuCard key={gpu.uuid} gpu={gpu} instances={instances.filter((item) => item.parentUuid === gpu.uuid)} freeGPUUUIDs={freeGPUUUIDs} />)}
       </div>
       <div className="cpu-section">
         <div className="cpu-section-title"><span>PHYSICAL CORE / SMT</span><span>{cores.length}C · {cpus.length}T</span></div>
@@ -405,13 +410,24 @@ function NumaCard({ node, cpus, gpus, freeCPUIds, freeGPUUUIDs }: {
   )
 }
 
-function GpuCard({ gpu, free }: { gpu: GPU; free: boolean }) {
+function GpuCard({ gpu, instances, freeGPUUUIDs }: { gpu: GPU; instances: GPU[]; freeGPUUUIDs: Set<string> }) {
   const memoryPercent = gpu.memoryBytes ? ((gpu.memoryUsedBytes ?? 0) / gpu.memoryBytes) * 100 : 0
+  const free = !gpu.migEnabled && freeGPUUUIDs.has(gpu.uuid)
   return (
-    <div className={gpu.migEnabled ? 'gpu-card allocated' : free ? 'gpu-card free' : 'gpu-card allocated'}>
+    <div className={free ? 'gpu-card free' : 'gpu-card allocated'}>
       <div className="gpu-card-top"><strong>GPU {gpu.index}</strong><span>{gpu.migEnabled ? 'MIG' : free ? 'FREE' : 'ALLOCATED'}</span></div>
       <p>{gpu.name}</p>
-      {gpu.migEnabled && <p className="muted">已切分，不参与整卡调度</p>}
+      {gpu.migEnabled && instances.length === 0 && <p className="muted">MIG 已开，尚无实例</p>}
+      {instances.length > 0 && (
+        <ul className="mig-instances">
+          {instances.map((item) => (
+            <li key={item.uuid} className={freeGPUUUIDs.has(item.uuid) ? 'free' : 'allocated'}>
+              <span>{item.profile || item.uuid.slice(0, 8)}</span>
+              <span>{freeGPUUUIDs.has(item.uuid) ? 'FREE' : 'BUSY'}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       <div className="gpu-metric"><span>VRAM</span><b>{formatBytes(gpu.memoryUsedBytes)} / {formatBytes(gpu.memoryBytes)}</b></div>
       <div className="meter"><i style={{ width: `${Math.min(memoryPercent, 100)}%` }} /></div>
       <div className="gpu-foot"><span>{gpu.utilization ?? 0}% UTIL</span><span>{gpu.temperatureCelsius ?? '—'}°C</span></div>

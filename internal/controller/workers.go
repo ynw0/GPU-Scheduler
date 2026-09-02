@@ -21,6 +21,7 @@ func (s *Server) Start(ctx context.Context) {
 	go s.queueLoop(ctx)
 	go s.reconcileLoop(ctx)
 	go s.metricsLoop(ctx)
+	go s.restoreMIGLayouts(ctx)
 }
 
 func (s *Server) queueLoop(ctx context.Context) {
@@ -51,7 +52,7 @@ func (s *Server) dispatchQueue(ctx context.Context) {
 		if job.Spec.ResourcePoolID != "" {
 			pool, poolErr := s.store.GetResourcePool(ctx, job.Spec.ResourcePoolID)
 			if poolErr == nil {
-				avail = scheduler.IntersectPool(avail, pool)
+				avail = scheduler.IntersectPool(avail, pool, topology.GPUs)
 			}
 		}
 		plan := s.reservations.Preview(topology, avail, job.Spec)
@@ -76,7 +77,7 @@ func (s *Server) dispatchQueue(ctx context.Context) {
 	promoteAvail := availability
 	if next.Spec.ResourcePoolID != "" {
 		if pool, poolErr := s.store.GetResourcePool(ctx, next.Spec.ResourcePoolID); poolErr == nil {
-			promoteAvail = scheduler.IntersectPool(availability, pool)
+			promoteAvail = scheduler.IntersectPool(availability, pool, topology.GPUs)
 		}
 	}
 	result, err := s.reservations.Promote(ctx, next, topology, promoteAvail)
@@ -177,6 +178,7 @@ func (s *Server) reconcileOnce(ctx context.Context) {
 			}
 		}
 	}
+	go s.restoreMIGLayouts(ctx)
 }
 
 func (s *Server) finishJob(ctx context.Context, job domain.Job, to domain.JobState, reason string) {

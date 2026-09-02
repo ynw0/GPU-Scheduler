@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from './api'
-import type { Job, JobSpec, ResourceRequest } from './types'
+import { gpuDeviceLabel, gpuRequestLabel } from './gpuLabel'
+import type { Job, JobSpec, ResourceRequest, Topology } from './types'
 
 function statusLabel(status: string): string {
   const labels: Record<string, string> = {
@@ -32,11 +33,6 @@ function specResources(spec: JobSpec): ResourceRequest {
   return spec.resources
 }
 
-function gpuLabel(resources: ResourceRequest): string {
-  if (resources.gpuMode === 'manual') return `${(resources.gpuUuids ?? []).length} 张整卡`
-  return `${resources.gpuCount} 张（自动）`
-}
-
 function cpuLabel(resources: ResourceRequest): string {
   if (resources.cpuMode === 'manual-threads') return `${(resources.cpuIds ?? []).length} 线程`
   return `${resources.cpuCount} 物理核`
@@ -44,12 +40,14 @@ function cpuLabel(resources: ResourceRequest): string {
 
 export function JobDetail({
   job,
+  topology,
   canWrite,
   onClose,
   onAction,
   onClone,
 }: {
   job: Job
+  topology?: Topology
   canWrite: boolean
   onClose: () => void
   onAction: (name: 'start' | 'stop' | 'cancel' | 'retry') => void
@@ -114,7 +112,7 @@ export function JobDetail({
               <div className="plan-conflict">{job.lastError}</div>
             )}
             {(job.allocations ?? []).map((item) => (
-              <div className="plan-line" key={item.id}><span>{item.resourceType}</span><strong>{item.resourceId}</strong></div>
+              <div className="plan-line" key={item.id}><span>{item.resourceType}</span><strong>{item.resourceType === 'gpu' ? gpuDeviceLabel(topology, item.resourceId) : item.resourceId}</strong></div>
             ))}
             {Object.entries(job.attempt?.containerIds ?? {}).map(([service, id]) => (
               <div className="plan-line" key={service}><span>容器 {service}</span><strong>{id}</strong></div>
@@ -197,7 +195,7 @@ function JobSpecView({ spec }: { spec: JobSpec }) {
           ))}
         </>
       )}
-      <div className="plan-line"><span>GPU</span><strong>{gpuLabel(resources)}</strong></div>
+      <div className="plan-line"><span>GPU</span><strong>{gpuRequestLabel(resources)}</strong></div>
       <div className="plan-line"><span>CPU</span><strong>{cpuLabel(resources)}</strong></div>
       <div className="plan-line"><span>内存</span><strong>{formatBytes(resources.memoryBytes)}</strong></div>
       <div className="plan-line"><span>停止宽限</span><strong>{spec.stopGraceSeconds}s</strong></div>

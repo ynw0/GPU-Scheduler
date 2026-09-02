@@ -128,8 +128,10 @@ export interface ResourceRequest {
   cpuCount: number
   cpuIds?: number[]
   gpuMode: 'auto' | 'manual'
+  gpuKind?: 'whole' | 'mig'
   gpuCount: number
   gpuUuids?: string[]
+  migProfile?: string
   memoryBytes: number
   numaPolicy: 'strict'
 }
