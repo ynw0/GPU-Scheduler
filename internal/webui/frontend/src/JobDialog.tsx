@@ -302,8 +302,8 @@ export function NewJobDialog({ topology, initialSpec, onClose }: { topology?: To
             <fieldset>
               <legend>02 / GPU 与 NUMA</legend>
               <div className="mode-switch"><button className={gpuMode === 'auto' ? 'active' : ''} onClick={() => { setGpuMode('auto'); setPlan(undefined) }}>自动分配</button><button className={gpuMode === 'manual' ? 'active' : ''} onClick={() => { setGpuMode('manual'); setPlan(undefined) }}>手动整卡</button></div>
-              {gpuMode === 'auto' ? <label>GPU 数量<input type="number" min={0} max={topology?.gpus.length ?? 8} value={gpuCount} onChange={(event) => setGpuCount(Number(event.target.value))} /></label> :
-                <div className="resource-choice-grid">{(topology?.gpus ?? []).map((gpu) => <button key={gpu.uuid} className={selectedGPUs.includes(gpu.uuid) ? 'resource-choice selected' : 'resource-choice'} onClick={() => toggleGPU(gpu.uuid)}><span>GPU {gpu.index}</span><small>NUMA {gpu.numaNode}</small>{selectedGPUs.includes(gpu.uuid) && <Check size={14} />}</button>)}</div>}
+              {gpuMode === 'auto' ? <label>GPU 数量<input type="number" min={0} max={(topology?.gpus ?? []).filter((gpu) => !gpu.parentUuid && !gpu.migEnabled).length} value={gpuCount} onChange={(event) => setGpuCount(Number(event.target.value))} /></label> :
+                <div className="resource-choice-grid">{(topology?.gpus ?? []).filter((gpu) => !gpu.parentUuid && !gpu.migEnabled).map((gpu) => <button key={gpu.uuid} className={selectedGPUs.includes(gpu.uuid) ? 'resource-choice selected' : 'resource-choice'} onClick={() => toggleGPU(gpu.uuid)}><span>GPU {gpu.index}</span><small>NUMA {gpu.numaNode}</small>{selectedGPUs.includes(gpu.uuid) && <Check size={14} />}</button>)}</div>}
             </fieldset>
             <fieldset>
               <legend>03 / CPU</legend>

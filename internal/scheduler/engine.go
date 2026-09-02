@@ -59,6 +59,9 @@ func selectGPUs(gpus []domain.GPU, available map[string]struct{}, request domain
 	}
 	byUUID := make(map[string]domain.GPU, len(gpus))
 	for _, gpu := range gpus {
+		if gpu.MigEnabled || gpu.ParentUUID != "" {
+			continue
+		}
 		byUUID[gpu.UUID] = gpu
 	}
 	if request.GPUMode == domain.GPUManual {
@@ -80,6 +83,9 @@ func selectGPUs(gpus []domain.GPU, available map[string]struct{}, request domain
 	}
 	candidates := make([]domain.GPU, 0)
 	for _, gpu := range gpus {
+		if gpu.MigEnabled || gpu.ParentUUID != "" {
+			continue
+		}
 		_, free := available[gpu.UUID]
 		if free && gpu.Healthy {
 			candidates = append(candidates, gpu)

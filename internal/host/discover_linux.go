@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -152,42 +153,99 @@ func (d *LinuxDiscoverer) discoverGPUs(nodes []domain.NUMANode) ([]domain.GPU, e
 		if ret != nvml.SUCCESS {
 			return nil, fmt.Errorf("get GPU %d: %s", index, nvml.ErrorString(ret))
 		}
-		uuid, ret := device.GetUUID()
-		if ret != nvml.SUCCESS {
-			return nil, fmt.Errorf("get GPU %d UUID: %s", index, nvml.ErrorString(ret))
-		}
-		name, ret := device.GetName()
-		if ret != nvml.SUCCESS {
-			return nil, fmt.Errorf("get GPU %d name: %s", index, nvml.ErrorString(ret))
-		}
-		pci, ret := device.GetPciInfo()
-		if ret != nvml.SUCCESS {
-			return nil, fmt.Errorf("get GPU %d PCI info: %s", index, nvml.ErrorString(ret))
-		}
-		memory, ret := device.GetMemoryInfo()
-		if ret != nvml.SUCCESS {
-			return nil, fmt.Errorf("get GPU %d memory: %s", index, nvml.ErrorString(ret))
-		}
-		utilization, ret := device.GetUtilizationRates()
-		if ret != nvml.SUCCESS {
-			return nil, fmt.Errorf("get GPU %d utilization: %s", index, nvml.ErrorString(ret))
-		}
-		temperature, ret := device.GetTemperature(nvml.TEMPERATURE_GPU)
-		if ret != nvml.SUCCESS {
-			return nil, fmt.Errorf("get GPU %d temperature: %s", index, nvml.ErrorString(ret))
-		}
-		pciBusID := fmt.Sprintf("%04x:%02x:%02x.0", pci.Domain, pci.Bus, pci.Device)
-		numaNode, err := d.gpuNUMANode(pciBusID, nodes)
+		gpu, err := d.readPhysicalGPU(device, index, nodes)
 		if err != nil {
 			return nil, err
 		}
-		gpus = append(gpus, domain.GPU{
-			UUID: uuid, Index: index, Name: name, PCIBusID: pciBusID, NUMANode: numaNode,
-			MemoryBytes: memory.Total, MemoryUsedBytes: memory.Used, Utilization: utilization.Gpu,
-			TemperatureCelsius: temperature, Healthy: true,
-		})
+		gpus = append(gpus, gpu)
+		if !gpu.MigEnabled {
+			continue
+		}
+		instances, err := readMIGInstances(device, gpu)
+		if err != nil {
+			return nil, err
+		}
+		gpus = append(gpus, instances...)
 	}
 	return gpus, nil
+}
+
+func (d *LinuxDiscoverer) readPhysicalGPU(device nvml.Device, index int, nodes []domain.NUMANode) (domain.GPU, error) {
+	uuid, ret := device.GetUUID()
+	if ret != nvml.SUCCESS {
+		return domain.GPU{}, fmt.Errorf("get GPU %d UUID: %s", index, nvml.ErrorString(ret))
+	}
+	name, ret := device.GetName()
+	if ret != nvml.SUCCESS {
+		return domain.GPU{}, fmt.Errorf("get GPU %d name: %s", index, nvml.ErrorString(ret))
+	}
+	pci, ret := device.GetPciInfo()
+	if ret != nvml.SUCCESS {
+		return domain.GPU{}, fmt.Errorf("get GPU %d PCI info: %s", index, nvml.ErrorString(ret))
+	}
+	memory, ret := device.GetMemoryInfo()
+	if ret != nvml.SUCCESS {
+		return domain.GPU{}, fmt.Errorf("get GPU %d memory: %s", index, nvml.ErrorString(ret))
+	}
+	migMode, _, migRet := device.GetMigMode()
+	migEnabled := migRet == nvml.SUCCESS && migMode == nvml.DEVICE_MIG_ENABLE
+	var utilization nvml.Utilization
+	var temperature uint32
+	if !migEnabled {
+		utilization, ret = device.GetUtilizationRates()
+		if ret != nvml.SUCCESS {
+			return domain.GPU{}, fmt.Errorf("get GPU %d utilization: %s", index, nvml.ErrorString(ret))
+		}
+		temperature, ret = device.GetTemperature(nvml.TEMPERATURE_GPU)
+		if ret != nvml.SUCCESS {
+			return domain.GPU{}, fmt.Errorf("get GPU %d temperature: %s", index, nvml.ErrorString(ret))
+		}
+	}
+	pciBusID := fmt.Sprintf("%04x:%02x:%02x.0", pci.Domain, pci.Bus, pci.Device)
+	numaNode, err := d.gpuNUMANode(pciBusID, nodes)
+	if err != nil {
+		return domain.GPU{}, err
+	}
+	return domain.GPU{
+		UUID: uuid, Index: index, Name: name, PCIBusID: pciBusID, NUMANode: numaNode,
+		MemoryBytes: memory.Total, MemoryUsedBytes: memory.Used, Utilization: utilization.Gpu,
+		TemperatureCelsius: temperature, Healthy: true, MigEnabled: migEnabled,
+	}, nil
+}
+
+var migProfileName = regexp.MustCompile(`\d+g\.\d+gb`)
+
+func readMIGInstances(parent nvml.Device, gpu domain.GPU) ([]domain.GPU, error) {
+	count, ret := parent.GetMaxMigDeviceCount()
+	if ret != nvml.SUCCESS || count == 0 {
+		return nil, nil
+	}
+	instances := make([]domain.GPU, 0, count)
+	for i := 0; i < count; i++ {
+		device, ret := parent.GetMigDeviceHandleByIndex(i)
+		if ret != nvml.SUCCESS {
+			continue
+		}
+		uuid, ret := device.GetUUID()
+		if ret != nvml.SUCCESS {
+			continue
+		}
+		name, ret := device.GetName()
+		if ret != nvml.SUCCESS {
+			name = gpu.Name
+		}
+		memory, ret := device.GetMemoryInfo()
+		var total, used uint64
+		if ret == nvml.SUCCESS {
+			total, used = memory.Total, memory.Used
+		}
+		instances = append(instances, domain.GPU{
+			UUID: uuid, Index: gpu.Index, Name: name, PCIBusID: gpu.PCIBusID, NUMANode: gpu.NUMANode,
+			MemoryBytes: total, MemoryUsedBytes: used, Healthy: true,
+			ParentUUID: gpu.UUID, Profile: migProfileName.FindString(name),
+		})
+	}
+	return instances, nil
 }
 
 func (d *LinuxDiscoverer) gpuNUMANode(pciBusID string, nodes []domain.NUMANode) (int, error) {

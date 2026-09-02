@@ -95,6 +95,15 @@ type GPU struct {
 	Utilization        uint32 `json:"utilization"`
 	TemperatureCelsius uint32 `json:"temperatureCelsius"`
 	Healthy            bool   `json:"healthy"`
+	MigEnabled         bool   `json:"migEnabled,omitempty"`
+	ParentUUID         string `json:"parentUuid,omitempty"`
+	Profile            string `json:"profile,omitempty"`
+}
+
+type MIGLayout struct {
+	GPUUUID  string   `json:"gpuUuid"`
+	Enabled  bool     `json:"enabled"`
+	Profiles []string `json:"profiles"`
 }
 
 type ImageInfo struct {

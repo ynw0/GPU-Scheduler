@@ -254,7 +254,16 @@ h1 { font-size: 25px; margin-bottom: 0; letter-spacing: -.025em; font-weight: 60
 .resource-choice-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 7px; }
 .resource-choice { min-height: 56px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); position: relative; cursor: pointer; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; padding: 0 10px; }
 .resource-choice span { font: 600 12px 'Cascadia Mono', monospace; color: var(--text); }.resource-choice small { color: var(--muted); font-size: 11px; margin-top: 4px; }.resource-choice svg { position: absolute; right: 8px; top: 8px; }
-.resource-choice.selected { border-color: var(--green); color: var(--green); background: #e8f6ee; }
+.resource-choice.disabled { opacity: .35; cursor: not-allowed; }
+.mig-settings { display: flex; flex-direction: column; gap: 16px; padding: 0 20px 28px; }
+.mig-card { border: 1px solid var(--line); background: var(--panel); padding: 16px; }
+.mig-card-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 8px; }
+.mig-card-head strong { font: 600 14px 'Cascadia Mono', monospace; }
+.mig-remain { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+.mig-profile-grid { margin-bottom: 12px; }
+.mig-picked { display: flex; gap: 8px; flex-wrap: wrap; min-height: 32px; align-items: center; margin-bottom: 12px; }
+.mig-chip { height: 28px; padding: 0 10px; border: 1px solid var(--green); background: #e8f6ee; color: var(--green); font: 12px 'Cascadia Mono', monospace; cursor: pointer; }
+.mig-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .thread-choice-grid { max-height: 190px; overflow-y: auto; display: grid; grid-template-columns: repeat(12,1fr); gap: 4px; padding-right: 5px; }
 .thread-choice { height: 34px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 3px; font: 11px 'Cascadia Mono', monospace; }
 .thread-choice small { color: var(--muted); font-size: 8px; }

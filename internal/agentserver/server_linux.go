@@ -13,6 +13,7 @@ import (
 	"gpu-scheduler/internal/executor"
 	"gpu-scheduler/internal/heartbeat"
 	"gpu-scheduler/internal/host"
+	"gpu-scheduler/internal/mig"
 	"gpu-scheduler/internal/monitor"
 	"gpu-scheduler/internal/platform"
 )
@@ -90,6 +91,28 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /internal/v1/heartbeats", s.listHeartbeats)
 	s.mux.HandleFunc("POST /internal/v1/heartbeats/ensure", s.ensureHeartbeat)
 	s.mux.HandleFunc("POST /internal/v1/heartbeats/close", s.closeHeartbeat)
+	s.mux.HandleFunc("POST /internal/v1/mig/apply", s.applyMIG)
+}
+
+func (s *Server) applyMIG(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		GPUUUID     string   `json:"gpuUuid"`
+		MemoryBytes uint64   `json:"memoryBytes"`
+		Profiles    []string `json:"profiles"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
+	if body.GPUUUID == "" {
+		writeJSON(w, 422, map[string]string{"error": "gpuUuid required"})
+		return
+	}
+	if err := mig.Apply(r.Context(), body.GPUUUID, body.MemoryBytes, body.Profiles); err != nil {
+		writeJSON(w, 422, map[string]any{"type": "about:blank", "title": "Apply MIG failed", "status": 422, "detail": err.Error()})
+		return
+	}
+	writeJSON(w, 200, map[string]string{"status": "ok"})
 }
 
 func (s *Server) containerMetrics(w http.ResponseWriter, r *http.Request) {

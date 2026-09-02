@@ -41,6 +41,15 @@ export interface GPU {
   memoryUsedBytes?: number
   temperatureCelsius?: number
   powerWatts?: number
+  parentUuid?: string
+  profile?: string
+  migEnabled?: boolean
+}
+
+export interface MIGLayout {
+  gpuUuid: string
+  enabled: boolean
+  profiles: string[]
 }
 
 export interface Topology {

@@ -335,7 +335,7 @@ function Overview({
               key={node.id}
               node={node}
               cpus={(topology?.cpus ?? []).filter((cpu) => cpu.numaNode === node.id)}
-              gpus={(topology?.gpus ?? []).filter((gpu) => gpu.numaNode === node.id)}
+              gpus={(topology?.gpus ?? []).filter((gpu) => gpu.numaNode === node.id && !gpu.parentUuid)}
               freeCPUIds={freeCPUIds}
               freeGPUUUIDs={freeGPUUUIDs}
             />
@@ -408,9 +408,10 @@ function NumaCard({ node, cpus, gpus, freeCPUIds, freeGPUUUIDs }: {
 function GpuCard({ gpu, free }: { gpu: GPU; free: boolean }) {
   const memoryPercent = gpu.memoryBytes ? ((gpu.memoryUsedBytes ?? 0) / gpu.memoryBytes) * 100 : 0
   return (
-    <div className={free ? 'gpu-card free' : 'gpu-card allocated'}>
-      <div className="gpu-card-top"><strong>GPU {gpu.index}</strong><span>{free ? 'FREE' : 'ALLOCATED'}</span></div>
+    <div className={gpu.migEnabled ? 'gpu-card allocated' : free ? 'gpu-card free' : 'gpu-card allocated'}>
+      <div className="gpu-card-top"><strong>GPU {gpu.index}</strong><span>{gpu.migEnabled ? 'MIG' : free ? 'FREE' : 'ALLOCATED'}</span></div>
       <p>{gpu.name}</p>
+      {gpu.migEnabled && <p className="muted">已切分，不参与整卡调度</p>}
       <div className="gpu-metric"><span>VRAM</span><b>{formatBytes(gpu.memoryUsedBytes)} / {formatBytes(gpu.memoryBytes)}</b></div>
       <div className="meter"><i style={{ width: `${Math.min(memoryPercent, 100)}%` }} /></div>
       <div className="gpu-foot"><span>{gpu.utilization ?? 0}% UTIL</span><span>{gpu.temperatureCelsius ?? '—'}°C</span></div>

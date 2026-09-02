@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"gpu-scheduler/internal/domain"
@@ -193,7 +194,8 @@ func (c *Client) postJSON(ctx context.Context, client *http.Client, path string,
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("agent returned %s", resp.Status)
+		text, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("agent returned %s: %s", resp.Status, strings.TrimSpace(string(text)))
 	}
 	if target == nil {
 		return nil
@@ -228,4 +230,13 @@ func (c *Client) Topology(ctx context.Context) (domain.Topology, error) {
 		return domain.Topology{}, err
 	}
 	return topology, nil
+}
+
+func (c *Client) ApplyMIG(ctx context.Context, gpuUUID string, memoryBytes uint64, profiles []string) error {
+	if profiles == nil {
+		profiles = []string{}
+	}
+	return c.postJSON(ctx, c.longClient, "/internal/v1/mig/apply", map[string]any{
+		"gpuUuid": gpuUUID, "memoryBytes": memoryBytes, "profiles": profiles,
+	}, nil)
 }

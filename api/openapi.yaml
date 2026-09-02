@@ -410,6 +410,15 @@ paths:
     post:
       operationId: createResourcePool
       responses: { "201": { description: Created } }
+  /mig/layouts:
+    get:
+      operationId: listMigLayouts
+      responses: { "200": { description: Saved MIG layouts } }
+  /mig/layouts/{gpuUuid}:
+    put:
+      operationId: applyMigLayout
+      parameters: [ { name: gpuUuid, in: path, required: true, schema: { type: string } } ]
+      responses: { "200": { description: Applied } }
   /audit-events:
     get:
       operationId: listAuditEvents

@@ -1,6 +1,6 @@
 import type {
   AuditEvent, Availability, ComposeSource, Health, ImageInfo, Job, JobMetricSnapshot, JobPlan, JobSpec,
-  Notification, Quota, ResourcePool, Team, Template, Topology, User, HostContainer,
+  MIGLayout, Notification, Quota, ResourcePool, Team, Template, Topology, User, HostContainer,
 } from './types'
 
 export class APIError extends Error {
@@ -96,5 +96,8 @@ export const api = {
   createTemplate: (name: string, spec: JobSpec) => mutate<Template>('/templates', 'POST', { name, spec }),
   updateTemplate: (id: string, name: string, spec: JobSpec) => mutate<void>(`/templates/${id}`, 'PATCH', { name, spec }),
   platform: () => request<{ allowedMountRoots: string[] }>('/platform'),
+  migLayouts: () => request<MIGLayout[]>('/mig/layouts'),
+  applyMigLayout: (gpuUuid: string, value: { enabled: boolean; profiles: string[] }) =>
+    mutate<MIGLayout>(`/mig/layouts/${encodeURIComponent(gpuUuid)}`, 'PUT', value),
   markNotificationRead: (id: string) => mutate<void>(`/notifications/${id}`, 'PATCH'),
 }

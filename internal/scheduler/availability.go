@@ -35,6 +35,9 @@ func BuildAvailability(topology domain.Topology, allocations []domain.Allocation
 		}
 	}
 	for _, gpu := range topology.GPUs {
+		if gpu.MigEnabled || gpu.ParentUUID != "" {
+			continue
+		}
 		_, blocked := blockedGPUs[gpu.UUID]
 		if gpu.Healthy && !blocked {
 			availability.GPUUUIDs = append(availability.GPUUUIDs, gpu.UUID)

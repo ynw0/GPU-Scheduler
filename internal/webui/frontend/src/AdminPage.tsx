@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
 import { cpuSelectable, resourceNuma, selectedGPUNuma } from './numa'
+import { MigSettings } from './MigSettings'
 import type { ComposeSource, Team, User } from './types'
 
 export function AdminPage({ role }: { role: User['role'] }) {
   const queryClient = useQueryClient()
-  const [tab, setTab] = useState<'users' | 'teams' | 'quotas' | 'compose' | 'pools' | 'audit'>('users')
+  const [tab, setTab] = useState<'users' | 'teams' | 'quotas' | 'compose' | 'pools' | 'mig' | 'audit'>('users')
   const users = useQuery({ queryKey: ['users'], queryFn: api.users, enabled: role === 'Admin' })
   const teams = useQuery({ queryKey: ['teams'], queryFn: api.teams, enabled: role === 'Admin' })
   const quotas = useQuery({ queryKey: ['quotas'], queryFn: api.quotas, enabled: role === 'Admin' })
@@ -113,9 +114,9 @@ export function AdminPage({ role }: { role: User['role'] }) {
       <div className="section-heading">
         <div><p className="eyebrow">CONTROL PLANE</p><h2>系统管理</h2></div>
         <div className="mode-switch">
-          {(['users', 'teams', 'quotas', 'compose', 'pools', 'audit'] as const).map((item) => (
+          {(['users', 'teams', 'quotas', 'compose', 'pools', 'mig', 'audit'] as const).map((item) => (
             <button key={item} className={tab === item ? 'active' : ''} onClick={() => setTab(item)}>
-              {{ users: '用户', teams: '团队', quotas: '配额', compose: 'Compose', pools: '资源池', audit: '审计' }[item]}
+              {{ users: '用户', teams: '团队', quotas: '配额', compose: 'Compose', pools: '资源池', mig: 'MIG切分', audit: '审计' }[item]}
             </button>
           ))}
         </div>
@@ -244,7 +245,7 @@ export function AdminPage({ role }: { role: User['role'] }) {
           <form className="admin-form" onSubmit={(event) => { event.preventDefault(); createPool.mutate() }}>
             <label>名称<input value={poolName} onChange={(event) => setPoolName(event.target.value)} /></label>
             <label className="checkbox-row"><input type="checkbox" checked={poolShared} onChange={(event) => setPoolShared(event.target.checked)} />共享池</label>
-            <div className="resource-choice-grid">{(topology.data?.gpus ?? []).map((gpu) => (
+            <div className="resource-choice-grid">{(topology.data?.gpus ?? []).filter((gpu) => !gpu.parentUuid && !gpu.migEnabled).map((gpu) => (
               <button type="button" key={gpu.uuid} className={poolGPUs.includes(gpu.uuid) ? 'resource-choice selected' : 'resource-choice'} onClick={() => togglePoolGPU(gpu.uuid)}>
                 <span>GPU {gpu.index}</span><small>NUMA {gpu.numaNode}</small>
               </button>
@@ -268,6 +269,7 @@ export function AdminPage({ role }: { role: User['role'] }) {
           </div>
         </div>
       )}
+      {tab === 'mig' && role === 'Admin' && <MigSettings />}
       {tab === 'audit' && (
         <div className="full-job-table">
           {(audit.data ?? []).map((item) => (
