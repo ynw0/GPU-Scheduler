@@ -47,6 +47,7 @@ export function evaluateMig(catalog: MigCatalog, slices: string[]): {
   usedMemoryGB: number
   remainMemGB: number
   selectable: Set<string>
+  counts: Map<string, number>
 } {
   const counts = new Map<string, number>()
   let usedG = 0
@@ -60,11 +61,7 @@ export function evaluateMig(catalog: MigCatalog, slices: string[]): {
   }
   const selectable = new Set<string>()
   for (const profile of catalog.profiles) {
-    const next = (counts.get(profile.name) ?? 0) + 1
-    if (next > profile.maxCount) continue
-    if (usedG + profile.g > MIG_TOTAL_G) continue
-    if (usedMemoryGB + profile.memoryGB > catalog.memoryGB) continue
-    selectable.add(profile.name)
+    if (maxCountFor(catalog, slices, profile.name) > 0) selectable.add(profile.name)
   }
   return {
     usedG,
@@ -72,5 +69,41 @@ export function evaluateMig(catalog: MigCatalog, slices: string[]): {
     usedMemoryGB,
     remainMemGB: catalog.memoryGB - usedMemoryGB,
     selectable,
+    counts,
   }
+}
+
+export function maxCountFor(catalog: MigCatalog, slices: string[], profileName: string): number {
+  const profile = catalog.profiles.find((item) => item.name === profileName)
+  if (!profile) return 0
+  const others = slices.filter((name) => name !== profileName)
+  let max = 0
+  for (let count = 1; count <= profile.maxCount; count += 1) {
+    const trial = [...others, ...Array(count).fill(profileName)]
+    if (!fits(catalog, trial)) break
+    max = count
+  }
+  return max
+}
+
+function fits(catalog: MigCatalog, slices: string[]): boolean {
+  const counts = new Map<string, number>()
+  let usedG = 0
+  let usedMemoryGB = 0
+  for (const name of slices) {
+    const profile = catalog.profiles.find((item) => item.name === name)
+    if (!profile) return false
+    const next = (counts.get(name) ?? 0) + 1
+    if (next > profile.maxCount) return false
+    counts.set(name, next)
+    usedG += profile.g
+    usedMemoryGB += profile.memoryGB
+    if (usedG > MIG_TOTAL_G || usedMemoryGB > catalog.memoryGB) return false
+  }
+  return true
+}
+
+export function setProfileCount(slices: string[], profileName: string, count: number): string[] {
+  const others = slices.filter((name) => name !== profileName)
+  return [...others, ...Array(Math.max(0, count)).fill(profileName)]
 }

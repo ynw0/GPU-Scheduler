@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
-import { catalogForMemory, evaluateMig } from './migLayout'
+import { catalogForMemory, evaluateMig, maxCountFor, setProfileCount } from './migLayout'
 import type { GPU, MIGLayout } from './types'
 
 export function MigSettings() {
@@ -13,7 +13,7 @@ export function MigSettings() {
 
   return (
     <div className="mig-settings">
-      <p className="field-hint">按卡切分。点选档位时按剩余 7g / 显存即时点亮可选项；例如点了 3 个 2g，就只剩 1g 可点。该卡有任务或容器时不能应用。应用会重置该卡，不必重启整机。</p>
+      <p className="field-hint">按卡切分。亮着的 1g/2g/3g/4g/7g 可直接选片数；例如 2g 选 ×3 后，只剩 1g 可再选 ×1。该卡有任务或容器时不能应用。应用会重置该卡，不必重启整机。</p>
       {physical.map((gpu) => (
         <MigCard key={gpu.uuid} gpu={gpu} children={(topology.data?.gpus ?? []).filter((item) => item.parentUuid === gpu.uuid)} saved={saved.get(gpu.uuid)} onApplied={() => {
           void queryClient.invalidateQueries({ queryKey: ['mig-layouts'] })
@@ -54,28 +54,38 @@ function MigCard({ gpu, children, saved, onApplied }: {
       <div className="mig-remain">剩余 {plan.remainG} / 7 g · 显存 {plan.remainMemGB} / {catalog.memoryGB} GB</div>
       <div className="resource-choice-grid mig-profile-grid">
         {catalog.profiles.map((profile) => {
-          const on = plan.selectable.has(profile.name)
+          const max = maxCountFor(catalog, slices, profile.name)
+          const current = plan.counts.get(profile.name) ?? 0
+          const on = max > 0
           return (
-            <button
-              key={profile.name}
-              type="button"
-              className={on ? 'resource-choice' : 'resource-choice disabled'}
-              disabled={!on}
-              onClick={() => on && setSlices([...slices, profile.name])}
-            >
-              <span>{profile.name}</span>
-              <small>{profile.g}g · {profile.memoryGB}GB · 最多 {profile.maxCount}</small>
-            </button>
+            <div key={profile.name} className={on ? 'resource-choice mig-profile' : 'resource-choice mig-profile disabled'}>
+              <span>{profile.g}g</span>
+              <small>{profile.memoryGB}GB</small>
+              <div className="mig-count">
+                {Array.from({ length: max }, (_, index) => index + 1).map((count) => (
+                  <button
+                    key={count}
+                    type="button"
+                    className={current === count ? 'active' : ''}
+                    disabled={!on}
+                    onClick={() => setSlices(setProfileCount(slices, profile.name, current === count ? 0 : count))}
+                  >
+                    ×{count}
+                  </button>
+                ))}
+              </div>
+            </div>
           )
         })}
       </div>
       <div className="mig-picked">
-        {slices.length ? slices.map((name, index) => (
-          <button type="button" className="mig-chip" key={`${name}-${index}`} onClick={() => setSlices(slices.filter((_, i) => i !== index))}>{name} ×</button>
-        )) : <span className="muted">未选档位 = 保持或恢复整卡</span>}
+        {slices.length
+          ? catalog.profiles.filter((profile) => (plan.counts.get(profile.name) ?? 0) > 0).map((profile) => (
+            <span className="mig-chip" key={profile.name}>{profile.name} ×{plan.counts.get(profile.name)}</span>
+          ))
+          : <span className="muted">未选档位 = 保持或恢复整卡</span>}
       </div>
       <div className="mig-actions">
-        <button type="button" className="text-button" onClick={() => setSlices(slices.slice(0, -1))} disabled={!slices.length}>撤销一片</button>
         <button type="button" className="text-button" onClick={() => setSlices([])}>清空</button>
         <button type="button" className="secondary-action" disabled={apply.isPending} onClick={() => apply.mutate(false)}>恢复整卡</button>
         <button type="button" className="primary-action" disabled={apply.isPending || !slices.length} onClick={() => apply.mutate(true)}>

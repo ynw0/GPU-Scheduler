@@ -260,7 +260,12 @@ h1 { font-size: 25px; margin-bottom: 0; letter-spacing: -.025em; font-weight: 60
 .mig-card-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 8px; }
 .mig-card-head strong { font: 600 14px 'Cascadia Mono', monospace; }
 .mig-remain { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
-.mig-profile-grid { margin-bottom: 12px; }
+.mig-profile-grid { margin-bottom: 12px; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.mig-profile { min-height: 92px; cursor: default; padding: 10px; }
+.mig-count { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.mig-count button { height: 26px; min-width: 32px; padding: 0 6px; border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); font: 11px 'Cascadia Mono', monospace; cursor: pointer; }
+.mig-count button.active { border-color: var(--green); background: #e8f6ee; color: var(--green); font-weight: 700; }
+.mig-count button:disabled { opacity: .35; cursor: not-allowed; }
 .mig-picked { display: flex; gap: 8px; flex-wrap: wrap; min-height: 32px; align-items: center; margin-bottom: 12px; }
 .mig-chip { height: 28px; padding: 0 10px; border: 1px solid var(--green); background: #e8f6ee; color: var(--green); font: 12px 'Cascadia Mono', monospace; cursor: pointer; }
 .mig-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
