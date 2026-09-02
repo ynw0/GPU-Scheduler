@@ -92,6 +92,7 @@ export function NewJobDialog({ topology, initialSpec, onClose }: { topology?: To
       ...(publishedPorts.length ? { publishedPorts } : {}),
       ...(shmMB > 0 ? { shmSizeBytes: shmMB * 1024 * 1024 } : {}),
       ...(imageFields.user.trim() ? { user: imageFields.user.trim() } : {}),
+      ...(imageFields.network.trim() ? { network: imageFields.network.trim() } : {}),
     }
   }
 

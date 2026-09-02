@@ -98,6 +98,9 @@ func (d *Docker) CreateImage(ctx context.Context, request ImageCreateRequest) (R
 	if len(entrypoint) == 0 {
 		entrypoint = nil
 	}
+	if err := domain.ValidateDockerNetwork(request.Workload.Network); err != nil {
+		return RuntimeRef{}, err
+	}
 	exposed, bindings, err := publishedPorts(request.Workload.PublishedPorts)
 	if err != nil {
 		return RuntimeRef{}, err
@@ -112,6 +115,7 @@ func (d *Docker) CreateImage(ctx context.Context, request ImageCreateRequest) (R
 		Init:         &initProcess,
 		PortBindings: bindings,
 		ShmSize:      int64(request.Workload.ShmSizeBytes),
+		NetworkMode:  container.NetworkMode(request.Workload.Network),
 	}
 	if len(request.Plan.GPUUUIDs) > 0 {
 		hostConfig.DeviceRequests = []container.DeviceRequest{{

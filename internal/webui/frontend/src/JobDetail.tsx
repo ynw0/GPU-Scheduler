@@ -186,6 +186,7 @@ function JobSpecView({ spec }: { spec: JobSpec }) {
           ))}
           {workload.shmSizeBytes ? <div className="plan-line"><span>共享内存</span><strong>{formatBytes(workload.shmSizeBytes)}</strong></div> : null}
           {workload.user ? <div className="plan-line"><span>用户</span><strong>{workload.user}</strong></div> : null}
+          {workload.network ? <div className="plan-line"><span>网络</span><strong>{workload.network}</strong></div> : null}
         </>
       )}
       {workload.kind === 'compose' && (

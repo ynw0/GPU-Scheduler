@@ -17,11 +17,12 @@ export type ImageFields = {
   ports: PortPublish[]
   shmMB: string
   user: string
+  network: string
 }
 
 export const emptyImageFields = (): ImageFields => ({
   image: '', command: '', entrypoint: '', workingDirectory: '', environment: '',
-  mounts: [], ports: [], shmMB: '', user: '',
+  mounts: [], ports: [], shmMB: '', user: '', network: '',
 })
 
 function lines(value: string): string[] {
@@ -49,6 +50,7 @@ export function imageFieldsFromWorkload(workload: ImageWorkload): ImageFields {
     ports: workload.publishedPorts ?? [],
     shmMB: workload.shmSizeBytes ? String(Math.round(workload.shmSizeBytes / 1024 / 1024)) : '',
     user: workload.user ?? '',
+    network: workload.network ?? '',
   }
 }
 
@@ -94,7 +96,7 @@ export function JobImageFields({
     if (result.memoryGB) onMemory(result.memoryGB)
     const applied = filledImage ? result.applied : result.applied.filter((item) => item !== '镜像')
     if (applied.length) notes.push(`已填写：${applied.join('、')}`)
-    if (result.ignored.length) notes.push(`已忽略（CPU/GPU/网络以本页和调度器为准）：${result.ignored.join('、')}`)
+    if (result.ignored.length) notes.push(`已忽略（以本页 CPU/GPU 设置为准）：${result.ignored.join('、')}`)
     if (result.unknown.length) notes.push(`未识别、未采用：${result.unknown.join('、')}`)
     setParseError('')
     setParseNotes(notes)
@@ -104,7 +106,7 @@ export function JobImageFields({
     <>
       <label>
         从 docker run 填入
-        <small>只用来识别填写下面的字段，不会执行这条命令。CPU / GPU / 网络始终以本页和调度器为准。</small>
+        <small>只用来识别填写下面的字段，不会执行这条命令。CPU / GPU 始终以本页资源设置为准。</small>
         <textarea value={dockerRun} onChange={(event) => setDockerRun(event.target.value)} rows={5} placeholder="docker run --rm -e FOO=1 -v /mnt/disk/exp:/data image:tag python train.py" />
       </label>
       <button type="button" className="secondary-action" onClick={fillFromDockerRun}>识别填写</button>
@@ -174,6 +176,11 @@ export function JobImageFields({
         <label>共享内存（MB）<input type="number" min={0} value={value.shmMB} onChange={(event) => set({ shmMB: event.target.value })} placeholder="留空则使用 Docker 默认" /></label>
         <label>用户<input value={value.user} onChange={(event) => set({ user: event.target.value })} placeholder="留空则使用镜像默认用户" /></label>
       </div>
+      <label>
+        Docker 网络
+        <small>对应 docker run --network，自定义网络可填。留空则使用默认。禁止 host、container、ns。</small>
+        <input value={value.network} onChange={(event) => set({ network: event.target.value })} placeholder="例如 lab-net" />
+      </label>
     </>
   )
 }

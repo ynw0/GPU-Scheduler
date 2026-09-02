@@ -150,6 +150,7 @@ type WorkloadSpec struct {
 	User             string            `json:"user,omitempty"`
 	ShmSizeBytes     uint64            `json:"shmSizeBytes,omitempty"`
 	PublishedPorts   []PortPublish     `json:"publishedPorts,omitempty"`
+	Network          string            `json:"network,omitempty"`
 	ComposeSourceID  string            `json:"composeSourceId,omitempty"`
 	Services         []ComposeService  `json:"services,omitempty"`
 }
@@ -158,7 +159,7 @@ func (w WorkloadSpec) AsImage() ImageWorkload {
 	return ImageWorkload{
 		Image: w.Image, Command: w.Command, Entrypoint: w.Entrypoint,
 		WorkingDirectory: w.WorkingDirectory, Environment: w.Environment, Mounts: w.Mounts,
-		User: w.User, ShmSizeBytes: w.ShmSizeBytes, PublishedPorts: w.PublishedPorts,
+		User: w.User, ShmSizeBytes: w.ShmSizeBytes, PublishedPorts: w.PublishedPorts, Network: w.Network,
 	}
 }
 
@@ -172,6 +173,7 @@ type ImageWorkload struct {
 	User             string            `json:"user,omitempty"`
 	ShmSizeBytes     uint64            `json:"shmSizeBytes,omitempty"`
 	PublishedPorts   []PortPublish     `json:"publishedPorts,omitempty"`
+	Network          string            `json:"network,omitempty"`
 }
 
 type ComposeWorkload struct {

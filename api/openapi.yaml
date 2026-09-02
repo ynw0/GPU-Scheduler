@@ -576,6 +576,7 @@ components:
               readOnly: { type: boolean }
         user: { type: string }
         shmSizeBytes: { type: integer, minimum: 1 }
+        network: { type: string }
         publishedPorts:
           type: array
           items:

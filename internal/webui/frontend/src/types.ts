@@ -157,6 +157,7 @@ export interface ImageWorkload {
   user?: string
   shmSizeBytes?: number
   publishedPorts?: PortPublish[]
+  network?: string
 }
 
 export interface ComposeWorkload {

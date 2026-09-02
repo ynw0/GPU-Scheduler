@@ -20,11 +20,12 @@ const WRITE_ARG: Record<string, string> = {
   '-u': 'user', '--user': 'user',
   '--shm-size': 'shm',
   '-m': 'memory', '--memory': 'memory',
+  '--network': 'network', '--net': 'network',
 }
 
 const IGNORE_ARG = new Set([
   '--gpus', '--runtime', '--cpuset-cpus', '--cpuset-mems', '--cpus', '--cpu-shares',
-  '--network', '--net', '--name', '--restart', '--label',
+  '--name', '--restart', '--label',
 ])
 
 const IGNORE_BOOL = new Set([
@@ -117,6 +118,13 @@ function parseShmMB(value: string): string | undefined {
   const bytes = parseBytes(value)
   if (bytes == null) return undefined
   return String(Math.max(0, Math.round(bytes / (1024 * 1024))))
+}
+
+function forbiddenNetwork(value: string): string | undefined {
+  const name = value.trim().toLowerCase()
+  if (name === 'host' || name.startsWith('container:') || name.startsWith('ns:')) {
+    return `拒绝网络 ${value.trim()}`
+  }
 }
 
 function parseMemoryGB(value: string): number | undefined {
@@ -373,6 +381,13 @@ export function parseDockerRun(input: string): DockerRunParse {
         else {
           memoryGB = gb
           noteApplied('内存限制')
+        }
+      } else if (write === 'network') {
+        const reason = forbiddenNetwork(got.value)
+        if (reason) rejected.push(reason)
+        else {
+          fields.network = got.value
+          noteApplied('网络')
         }
       }
       continue

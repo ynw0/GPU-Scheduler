@@ -335,6 +335,9 @@ func validateJobSpec(spec domain.JobSpec, identity auth.Identity) error {
 			return errors.New("环境变量名不能为空")
 		}
 	}
+	if err := domain.ValidateDockerNetwork(spec.Workload.Network); err != nil {
+		return err
+	}
 	return nil
 }
 
