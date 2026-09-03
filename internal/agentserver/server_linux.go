@@ -5,8 +5,11 @@ package agentserver
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
+	"os/exec"
+	"time"
 
 	"gpu-scheduler/internal/config"
 	"gpu-scheduler/internal/domain"
@@ -92,6 +95,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /internal/v1/heartbeats/ensure", s.ensureHeartbeat)
 	s.mux.HandleFunc("POST /internal/v1/heartbeats/close", s.closeHeartbeat)
 	s.mux.HandleFunc("POST /internal/v1/mig/apply", s.applyMIG)
+	s.mux.HandleFunc("POST /internal/v1/host/reboot", s.reboot)
 }
 
 func (s *Server) applyMIG(w http.ResponseWriter, r *http.Request) {
@@ -108,11 +112,24 @@ func (s *Server) applyMIG(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 422, map[string]string{"error": "gpuUuid required"})
 		return
 	}
-	if err := mig.Apply(r.Context(), body.GPUUUID, body.MemoryBytes, body.Profiles); err != nil {
+	err := mig.Apply(r.Context(), body.GPUUUID, body.MemoryBytes, body.Profiles)
+	if errors.Is(err, mig.ErrRebootRequired) {
+		writeJSON(w, 200, map[string]string{"status": "reboot-required"})
+		return
+	}
+	if err != nil {
 		writeJSON(w, 422, map[string]any{"type": "about:blank", "title": "Apply MIG failed", "status": 422, "detail": err.Error()})
 		return
 	}
 	writeJSON(w, 200, map[string]string{"status": "ok"})
+}
+
+func (s *Server) reboot(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, 200, map[string]string{"status": "rebooting"})
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		_ = exec.Command("systemctl", "reboot").Run()
+	}()
 }
 
 func (s *Server) containerMetrics(w http.ResponseWriter, r *http.Request) {

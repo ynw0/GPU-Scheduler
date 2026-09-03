@@ -67,7 +67,8 @@ func (s *Server) applyMIGLayout(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 409, "GPU busy", "该卡仍有任务或容器占用，切分前必须结束")
 		return
 	}
-	if err := s.agent.ApplyMIG(r.Context(), gpuUUID, gpu.MemoryBytes, body.Profiles); err != nil {
+	needsReboot, err := s.agent.ApplyMIG(r.Context(), gpuUUID, gpu.MemoryBytes, body.Profiles)
+	if err != nil {
 		writeProblem(w, 503, "Apply MIG failed", err.Error())
 		return
 	}
@@ -78,7 +79,9 @@ func (s *Server) applyMIGLayout(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = s.store.InsertAudit(r.Context(), identityFrom(r.Context()).UserID, "gpu.mig", "gpu", gpuUUID, mig.FormatSlices(body.Profiles))
 	s.events.Publish("topology", layout)
-	writeJSON(w, 200, layout)
+	writeJSON(w, 200, map[string]any{
+		"gpuUuid": layout.GPUUUID, "enabled": layout.Enabled, "profiles": layout.Profiles, "needsReboot": needsReboot,
+	})
 }
 
 func (s *Server) restoreMIGLayouts(ctx context.Context) {
@@ -125,8 +128,12 @@ func (s *Server) restoreOneMIGLayout(ctx context.Context, topology domain.Topolo
 	if busy {
 		return fmt.Errorf("GPU %d 有任务占用，跳过重建 MIG 布局", gpu.Index)
 	}
-	if err := s.agent.ApplyMIG(ctx, layout.GPUUUID, gpu.MemoryBytes, layout.Profiles); err != nil {
+	needsReboot, err := s.agent.ApplyMIG(ctx, layout.GPUUUID, gpu.MemoryBytes, layout.Profiles)
+	if err != nil {
 		return fmt.Errorf("GPU %d 重建 MIG 失败: %w", gpu.Index, err)
+	}
+	if needsReboot {
+		return nil
 	}
 	s.log.Info("restored MIG layout", "gpu", layout.GPUUUID, "profiles", mig.FormatSlices(layout.Profiles))
 	s.events.Publish("topology", layout)

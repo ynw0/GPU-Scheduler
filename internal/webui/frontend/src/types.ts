@@ -50,6 +50,7 @@ export interface MIGLayout {
   gpuUuid: string
   enabled: boolean
   profiles: string[]
+  needsReboot?: boolean
 }
 
 export interface Topology {

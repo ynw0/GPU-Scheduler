@@ -99,6 +99,7 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /api/v1/resource-pools", s.protected(s.requireAdmin(s.createPool), true))
 	s.mux.Handle("GET /api/v1/mig/layouts", s.protected(s.requireAdmin(s.listMIGLayouts), false))
 	s.mux.Handle("PUT /api/v1/mig/layouts/{gpuUuid}", s.protected(s.requireAdmin(s.applyMIGLayout), true))
+	s.mux.Handle("POST /api/v1/host/reboot", s.protected(s.requireAdmin(s.rebootHost), true))
 	s.mux.Handle("GET /api/v1/audit-events", s.protected(s.requireAudit(s.listAudit), false))
 	s.mux.Handle("GET /api/v1/notifications", s.protected(http.HandlerFunc(s.listNotifications), false))
 	s.mux.Handle("PATCH /api/v1/notifications/{id}", s.protected(http.HandlerFunc(s.readNotification), true))

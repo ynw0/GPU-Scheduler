@@ -99,5 +99,6 @@ export const api = {
   migLayouts: () => request<MIGLayout[]>('/mig/layouts'),
   applyMigLayout: (gpuUuid: string, value: { enabled: boolean; profiles: string[] }) =>
     mutate<MIGLayout>(`/mig/layouts/${encodeURIComponent(gpuUuid)}`, 'PUT', value),
+  rebootHost: () => mutate<void>('/host/reboot', 'POST'),
   markNotificationRead: (id: string) => mutate<void>(`/notifications/${id}`, 'PATCH'),
 }

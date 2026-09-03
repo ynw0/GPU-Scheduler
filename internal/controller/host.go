@@ -331,3 +331,12 @@ func orEmptyStrings(values []string) []string {
 	}
 	return values
 }
+
+func (s *Server) rebootHost(w http.ResponseWriter, r *http.Request) {
+	if err := s.agent.Reboot(r.Context()); err != nil {
+		writeProblem(w, 503, "Reboot failed", err.Error())
+		return
+	}
+	_ = s.store.InsertAudit(r.Context(), identityFrom(r.Context()).UserID, "host.reboot", "host", "", "")
+	w.WriteHeader(204)
+}

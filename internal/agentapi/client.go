@@ -232,11 +232,21 @@ func (c *Client) Topology(ctx context.Context) (domain.Topology, error) {
 	return topology, nil
 }
 
-func (c *Client) ApplyMIG(ctx context.Context, gpuUUID string, memoryBytes uint64, profiles []string) error {
+func (c *Client) ApplyMIG(ctx context.Context, gpuUUID string, memoryBytes uint64, profiles []string) (bool, error) {
 	if profiles == nil {
 		profiles = []string{}
 	}
-	return c.postJSON(ctx, c.longClient, "/internal/v1/mig/apply", map[string]any{
+	var result struct {
+		Status string `json:"status"`
+	}
+	if err := c.postJSON(ctx, c.longClient, "/internal/v1/mig/apply", map[string]any{
 		"gpuUuid": gpuUUID, "memoryBytes": memoryBytes, "profiles": profiles,
-	}, nil)
+	}, &result); err != nil {
+		return false, err
+	}
+	return result.Status == "reboot-required", nil
+}
+
+func (c *Client) Reboot(ctx context.Context) error {
+	return c.postJSON(ctx, c.httpClient, "/internal/v1/host/reboot", map[string]any{}, nil)
 }

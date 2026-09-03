@@ -24,12 +24,29 @@ export function MigSettings() {
   const queryClient = useQueryClient()
   const topology = useQuery({ queryKey: ['topology'], queryFn: api.topology })
   const layouts = useQuery({ queryKey: ['mig-layouts'], queryFn: api.migLayouts })
+  const reboot = useMutation({ mutationFn: api.rebootHost })
+  const [armed, setArmed] = useState(false)
   const physical = (topology.data?.gpus ?? []).filter((gpu) => !gpu.parentUuid)
   const saved = new Map((layouts.data ?? []).map((item) => [item.gpuUuid, item]))
 
   return (
     <div className="mig-settings">
-      <p className="field-hint">按卡切分。亮着的 1g/2g/3g/4g/7g 可直接选片数；例如 2g 选 ×3 后，只剩 1g 可再选 ×1。该卡有任务或容器时不能应用。应用会重置该卡，不必重启整机。</p>
+      <p className="field-hint">按卡切分。亮着的 1g/2g/3g/4g/7g 可直接选片数；例如 2g 选 ×3 后，只剩 1g 可再选 ×1。该卡有任务或容器时不能应用。切换 MIG 必须重启本机。</p>
+      <div className="mig-actions">
+        {!armed && (
+          <button type="button" className="secondary-action" disabled={reboot.isPending} onClick={() => setArmed(true)}>重启本机</button>
+        )}
+        {armed && (
+          <>
+            <span className="field-hint">将重启整台机器，所有任务会中断。</span>
+            <button type="button" className="text-button" onClick={() => setArmed(false)}>取消</button>
+            <button type="button" className="primary-action" disabled={reboot.isPending} onClick={() => reboot.mutate()}>
+              {reboot.isPending ? '正在重启…' : '确认重启'}
+            </button>
+          </>
+        )}
+      </div>
+      {reboot.error && <div className="plan-conflict">{String(reboot.error.message)}</div>}
       {physical.map((gpu) => (
         <MigCard key={gpu.uuid} gpu={gpu} children={(topology.data?.gpus ?? []).filter((item) => item.parentUuid === gpu.uuid)} saved={saved.get(gpu.uuid)} onApplied={() => {
           void queryClient.invalidateQueries({ queryKey: ['mig-layouts'] })
@@ -52,21 +69,23 @@ function MigCard({ gpu, children, saved, onApplied }: {
   const catalog = useMemo(() => catalogForMemory(gpu.memoryBytes), [gpu.memoryBytes])
   const [slices, setSlices] = useState<string[]>(saved?.profiles ?? [])
   const [expect, setExpect] = useState<{ enabled: boolean; profiles: string[] }>()
+  const [needsReboot, setNeedsReboot] = useState(false)
   useEffect(() => {
     setSlices(saved?.profiles ?? [])
   }, [gpu.uuid, saved?.enabled, (saved?.profiles ?? []).join(',')])
   const plan = evaluateMig(catalog, slices)
   const apply = useMutation({
     mutationFn: (enabled: boolean) => api.applyMigLayout(gpu.uuid, { enabled, profiles: enabled ? slices : [] }),
-    onMutate: () => { setExpect(undefined) },
+    onMutate: () => { setExpect(undefined); setNeedsReboot(false) },
     onSuccess: (layout) => {
       setExpect({ enabled: layout.enabled, profiles: layout.profiles ?? [] })
+      setNeedsReboot(Boolean(layout.needsReboot))
       onApplied()
     },
   })
   const applying = apply.isPending
   const matched = expect ? layoutVisible(gpu, children, expect.enabled, expect.profiles) : false
-  const waiting = Boolean(expect) && !applying && !matched
+  const waiting = Boolean(expect) && !applying && !matched && !needsReboot
   const done = Boolean(expect) && !applying && matched
   const live = gpu.migEnabled ? (children.length ? children.map((item) => item.profile || item.uuid.slice(0, 8)).join(' + ') : 'MIG 已开，尚无实例') : '整卡'
 
@@ -133,7 +152,8 @@ function MigCard({ gpu, children, saved, onApplied }: {
           {applying ? '正在应用…' : '应用切分'}
         </button>
       </div>
-      {applying && <div className="field-hint">正在重置该卡并建实例，约 15–60 秒</div>}
+      {applying && <div className="field-hint">正在写入 MIG 模式…</div>}
+      {needsReboot && <div className="plan-status ok">切分已写入，重启后生效。点上方「重启本机」。</div>}
       {waiting && <div className="field-hint">切分已提交，等待拓扑发现实例…</div>}
       {done && <div className="plan-status ok">已完成：{resultLabel}</div>}
       {apply.error && <div className="plan-conflict">{String(apply.error.message)}</div>}
