@@ -86,6 +86,14 @@ func (s *Store) TransitionJob(ctx context.Context, id string, to domain.JobState
 	return nil
 }
 
+func (s *Store) DeleteJob(ctx context.Context, id string) error {
+	if _, err := s.db.ExecContext(ctx, "UPDATE discovered_containers SET managed_job_id=NULL WHERE managed_job_id=?", id); err != nil {
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, "DELETE FROM jobs WHERE id=?", id)
+	return err
+}
+
 func (s *Store) ReleaseAllocations(ctx context.Context, jobID string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE allocations SET state='RELEASED',released_at=?
         WHERE job_id=? AND state IN ('RESERVED','ACTIVE','RELEASING')`,

@@ -26,7 +26,7 @@ import { HostContainersPage } from './HostContainers'
 import { JobDetail } from './JobDetail'
 import { NewJobDialog } from './JobDialog'
 import { AccountMenu } from './AccountMenu'
-import type { GPU, Job, JobSpec, LogicalCPU, NUMANode, Topology } from './types'
+import type { GPU, Job, JobAction, JobSpec, LogicalCPU, NUMANode, Topology } from './types'
 
 type Section = 'overview' | 'jobs' | 'host' | 'queue' | 'templates' | 'admin'
 
@@ -46,7 +46,7 @@ function formatBytes(value = 0): string {
 
 function statusLabel(status: string): string {
   const labels: Record<string, string> = {
-    RUNNING: '运行中', QUEUED: '排队中', RESERVED: '已预约', FAILED: '失败',
+    RUNNING: '运行中', PAUSED: '已暂停', QUEUED: '排队中', RESERVED: '已预约', FAILED: '失败',
     SUCCEEDED: '已完成', CREATING: '创建中', STARTING: '启动中', STOPPING: '停止中',
     CANCELED: '已取消', DRIFTED: '漂移', ORPHANED: '孤儿', DEGRADED: '降级',
   }
@@ -89,17 +89,29 @@ export function App() {
   }, [authenticated, queryClient])
 
   const action = useMutation({
-    mutationFn: ({ id, name }: { id: string; name: 'start' | 'stop' | 'cancel' | 'retry' }) => api.jobAction(id, name),
-    onSuccess: () => {
+    mutationFn: ({ id, name }: { id: string; name: JobAction }) => api.jobAction(id, name),
+    onSuccess: (_job, vars) => {
       void queryClient.invalidateQueries({ queryKey: ['jobs'] })
+      if (vars.name === 'stop') {
+        if (selectedJobId === vars.id) setSelectedJobId(undefined)
+        return
+      }
       if (selectedJobId) void queryClient.invalidateQueries({ queryKey: ['job', selectedJobId] })
     },
+  })
+  const markAllRead = useMutation({
+    mutationFn: api.markAllNotificationsRead,
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['notifications'] }) },
+  })
+  const clearNotify = useMutation({
+    mutationFn: api.clearNotifications,
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['notifications'] }) },
   })
 
   if (me.isLoading) return <BootScreen />
   if (!me.data) return <LoginScreen />
 
-  const running = (jobs.data ?? []).filter((job) => job.state === 'RUNNING')
+  const occupying = (jobs.data ?? []).filter((job) => job.state === 'RUNNING' || job.state === 'PAUSED')
   const queued = (jobs.data ?? []).filter((job) => job.state === 'QUEUED')
   const unreadCount = (notifications.data ?? []).filter((item) => !item.readAt).length
   const isOffline = health.data?.agent === 'offline'
@@ -189,7 +201,7 @@ export function App() {
             freeCPUIds={new Set(availability.data?.cpuIds ?? [])}
             freeGPUUUIDs={new Set(availability.data?.gpuUuids ?? [])}
             jobs={jobs.data ?? []}
-            runningCount={running.length}
+            runningCount={occupying.length}
             queueCount={queued.length}
             onShowAll={() => setSection('jobs')}
             onOpenJob={setSelectedJobId}
@@ -219,7 +231,14 @@ export function App() {
       )}
       {notifyOpen && (
         <aside className="notify-drawer">
-          <header><p className="eyebrow">NOTIFICATIONS</p><h3>站内通知</h3></header>
+          <header>
+            <p className="eyebrow">NOTIFICATIONS</p>
+            <h3>站内通知</h3>
+            <div className="notify-actions">
+              <button className="text-button" disabled={!unreadCount || markAllRead.isPending} onClick={() => markAllRead.mutate()}>一键已读</button>
+              <button className="text-button" disabled={!(notifications.data ?? []).length || clearNotify.isPending} onClick={() => clearNotify.mutate()}>清除通知</button>
+            </div>
+          </header>
           {(notifications.data ?? []).map((item) => (
             <button className={item.readAt ? 'notify-item read' : 'notify-item'} key={item.id} onClick={() => { void api.markNotificationRead(item.id); void queryClient.invalidateQueries({ queryKey: ['notifications'] }) }}>
               <strong>{item.title}</strong><span>{item.body}</span>
@@ -465,7 +484,7 @@ function SectionContent({
   gpus: GPU[]
   onOpenJob: (id: string) => void
   onUseTemplate: (spec: JobSpec) => void
-  onAction: (id: string, name: 'start' | 'stop' | 'cancel' | 'retry') => void
+  onAction: (id: string, name: JobAction) => void
   canWrite: boolean
 }) {
   if (section === 'admin') return <AdminPage role={role} />
@@ -508,10 +527,17 @@ function SectionContent({
             <span><b className={`status-pill status-${job.state.toLowerCase()}`}>{statusLabel(job.state)}</b></span>
             <span className="priority">{job.priority}</span>
             <span className="muted">{new Date(job.createdAt).toLocaleString('zh-CN')}</span>
-            <span>
-              {canWrite && job.state === 'RUNNING' && <button className="text-button" onClick={(event) => { event.stopPropagation(); onAction(job.id, 'stop') }}>停止</button>}
-              {canWrite && job.state === 'QUEUED' && <button className="text-button" onClick={(event) => { event.stopPropagation(); onAction(job.id, 'cancel') }}>取消</button>}
-              {canWrite && job.state === 'FAILED' && <button className="text-button" onClick={(event) => { event.stopPropagation(); onAction(job.id, 'retry') }}>重试</button>}
+            <span className="job-ops" onClick={(event) => event.stopPropagation()}>
+              {canWrite && (job.state === 'RUNNING' || job.state === 'DEGRADED' || job.state === 'DRIFTED') && (
+                <button className="text-button" onClick={() => onAction(job.id, 'pause')}>暂停</button>
+              )}
+              {canWrite && job.state === 'PAUSED' && (
+                <button className="text-button" onClick={() => onAction(job.id, 'resume')}>继续</button>
+              )}
+              {canWrite && <button className="text-button" onClick={() => onAction(job.id, 'stop')}>停止</button>}
+              {canWrite && (job.state === 'FAILED' || job.state === 'CANCELED' || job.state === 'ORPHANED') && (
+                <button className="text-button" onClick={() => onAction(job.id, 'retry')}>重试</button>
+              )}
             </span>
           </div>
         ))}

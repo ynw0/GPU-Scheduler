@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"gpu-scheduler/internal/domain"
@@ -24,8 +25,12 @@ func (s *Server) actOnJob(w http.ResponseWriter, r *http.Request) {
 	switch action {
 	case "start":
 		actErr = s.startJob(r.Context(), job)
+	case "pause":
+		actErr = s.pauseJob(r.Context(), job)
+	case "resume":
+		actErr = s.resumeJob(r.Context(), job)
 	case "stop":
-		actErr = s.stopJob(r.Context(), job, domain.JobCanceled)
+		actErr = s.destroyJob(r.Context(), job)
 	case "cancel":
 		actErr = s.cancelJob(r.Context(), job)
 	case "retry":
@@ -40,6 +45,10 @@ func (s *Server) actOnJob(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = s.store.InsertAudit(r.Context(), identity.UserID, "job."+action, "job", job.ID, action)
 	s.events.Publish("job", job.ID)
+	if action == "stop" {
+		writeJSON(w, 202, map[string]any{"id": job.ID, "deleted": true})
+		return
+	}
 	updated, _ := s.store.GetJob(r.Context(), job.ID)
 	writeJSON(w, 202, updated)
 }
@@ -80,7 +89,7 @@ func (s *Server) cancelJob(ctx context.Context, job domain.Job) error {
 		_ = s.store.SetJobLastError(ctx, job.ID, "已取消")
 		_ = s.store.ReleaseAllocations(ctx, job.ID)
 		return nil
-	case domain.JobRunning, domain.JobDrifted, domain.JobDegraded, domain.JobStopping:
+	case domain.JobRunning, domain.JobPaused, domain.JobDrifted, domain.JobDegraded, domain.JobStopping:
 		return s.stopJob(ctx, job, domain.JobCanceled)
 	default:
 		return domain.ValidateTransition(job.State, domain.JobCanceled)
@@ -121,5 +130,65 @@ func (s *Server) retryJob(ctx context.Context, job domain.Job) error {
 	_ = s.store.SetJobLastError(ctx, job.ID, "")
 	_ = s.store.ResetBypass(ctx, job.ID)
 	go s.dispatchQueue(context.Background())
+	return nil
+}
+
+func (s *Server) pauseJob(ctx context.Context, job domain.Job) error {
+	switch job.State {
+	case domain.JobRunning, domain.JobDrifted, domain.JobDegraded:
+	default:
+		return domain.ValidateTransition(job.State, domain.JobPaused)
+	}
+	if err := s.forEachJobContainer(ctx, job.ID, s.agent.PauseContainer); err != nil {
+		return err
+	}
+	return s.store.TransitionJob(ctx, job.ID, domain.JobPaused)
+}
+
+func (s *Server) resumeJob(ctx context.Context, job domain.Job) error {
+	if job.State != domain.JobPaused {
+		return domain.ValidateTransition(job.State, domain.JobRunning)
+	}
+	if err := s.forEachJobContainer(ctx, job.ID, s.agent.UnpauseContainer); err != nil {
+		return err
+	}
+	return s.store.TransitionJob(ctx, job.ID, domain.JobRunning)
+}
+
+func (s *Server) destroyJob(ctx context.Context, job domain.Job) error {
+	if attempt, err := s.store.LatestAttempt(ctx, job.ID); err == nil {
+		if len(attempt.ContainerIDs) > 0 {
+			timeout := job.Spec.StopGraceSeconds
+			if timeout <= 0 {
+				timeout = 30
+			}
+			if stopErr := s.agent.Stop(ctx, store.RuntimeFromAttempt(attempt), timeout); stopErr != nil {
+				s.log.Error("stop workload", "job_id", job.ID, "error", stopErr)
+			}
+		}
+		_ = s.agent.RemoveAttempt(ctx, attempt.ID)
+		_ = s.agent.CloseHeartbeat(ctx, attempt.ID)
+	}
+	_ = s.store.ReleaseAllocations(ctx, job.ID)
+	if err := s.store.DeleteJob(ctx, job.ID); err != nil {
+		return err
+	}
+	_, _ = s.notifier.Publish(ctx, job.OwnerID, "warning", "任务已删除", job.Name)
+	return nil
+}
+
+func (s *Server) forEachJobContainer(ctx context.Context, jobID string, fn func(context.Context, string) error) error {
+	attempt, err := s.store.LatestAttempt(ctx, jobID)
+	if err != nil {
+		return err
+	}
+	if len(attempt.ContainerIDs) == 0 {
+		return fmt.Errorf("job %s has no containers", jobID)
+	}
+	for _, id := range attempt.ContainerIDs {
+		if err := fn(ctx, id); err != nil {
+			return err
+		}
+	}
 	return nil
 }

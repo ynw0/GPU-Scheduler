@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from './api'
 import { gpuDeviceLabel, gpuRequestLabel } from './gpuLabel'
-import type { Job, JobSpec, ResourceRequest, Topology } from './types'
+import type { Job, JobAction, JobSpec, ResourceRequest, Topology } from './types'
 
 function statusLabel(status: string): string {
   const labels: Record<string, string> = {
-    RUNNING: '运行中', QUEUED: '排队中', RESERVED: '已预约', FAILED: '失败',
+    RUNNING: '运行中', PAUSED: '已暂停', QUEUED: '排队中', RESERVED: '已预约', FAILED: '失败',
     SUCCEEDED: '已完成', CREATING: '创建中', STARTING: '启动中', STOPPING: '停止中',
     CANCELED: '已取消', DRIFTED: '漂移', ORPHANED: '孤儿', DEGRADED: '降级',
   }
@@ -50,7 +50,7 @@ export function JobDetail({
   topology?: Topology
   canWrite: boolean
   onClose: () => void
-  onAction: (name: 'start' | 'stop' | 'cancel' | 'retry') => void
+  onAction: (name: JobAction) => void
   onClone: (spec: JobSpec) => void
 }) {
   const [logText, setLogText] = useState('')
@@ -136,9 +136,10 @@ export function JobDetail({
               <div className="dialog-actions">
                 {job.spec && <button className="secondary-action" onClick={() => onClone({ ...job.spec!, name: nextCloneName(job.spec!.name || job.name) })}>再开一次</button>}
                 {job.state === 'QUEUED' && <button className="secondary-action" onClick={() => onAction('start')}>立即调度</button>}
-                {(job.state === 'RUNNING' || job.state === 'DEGRADED' || job.state === 'DRIFTED') && <button className="secondary-action" onClick={() => onAction('stop')}>停止</button>}
-                {['QUEUED', 'RESERVED', 'RUNNING', 'CREATING', 'STARTING', 'DEGRADED', 'DRIFTED'].includes(job.state) && <button className="secondary-action" onClick={() => onAction('cancel')}>取消</button>}
-                {job.state === 'FAILED' && <button className="primary-action" onClick={() => onAction('retry')}>重试</button>}
+                {(job.state === 'RUNNING' || job.state === 'DEGRADED' || job.state === 'DRIFTED') && <button className="secondary-action" onClick={() => onAction('pause')}>暂停</button>}
+                {job.state === 'PAUSED' && <button className="secondary-action" onClick={() => onAction('resume')}>继续</button>}
+                <button className="secondary-action" onClick={() => onAction('stop')}>停止</button>
+                {(job.state === 'FAILED' || job.state === 'CANCELED' || job.state === 'ORPHANED') && <button className="primary-action" onClick={() => onAction('retry')}>重试</button>}
               </div>
             )}
           </div>

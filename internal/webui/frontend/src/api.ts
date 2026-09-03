@@ -1,5 +1,5 @@
 import type {
-  AuditEvent, Availability, ComposeSource, Health, ImageInfo, Job, JobMetricSnapshot, JobPlan, JobSpec,
+  AuditEvent, Availability, ComposeSource, Health, ImageInfo, Job, JobAction, JobMetricSnapshot, JobPlan, JobSpec,
   MIGLayout, Notification, Quota, ResourcePool, Team, Template, Topology, User, HostContainer,
 } from './types'
 
@@ -75,7 +75,7 @@ export const api = {
   notifications: () => request<Notification[]>('/notifications'),
   planJob: (spec: JobSpec) => mutate<JobPlan>('/job-plans', 'POST', spec),
   createJob: (spec: JobSpec) => mutate<Job>('/jobs', 'POST', spec, { 'Idempotency-Key': crypto.randomUUID() }),
-  jobAction: (id: string, action: 'start' | 'stop' | 'cancel' | 'retry') => mutate<Job>(`/jobs/${id}/actions/${action}`, 'POST'),
+  jobAction: (id: string, action: JobAction) => mutate<Job>(`/jobs/${id}/actions/${action}`, 'POST'),
   createComposeSource: (value: { name: string; rootPath: string; entryFile: string }) => mutate<ComposeSource>('/compose-sources', 'POST', value),
   createComposeFromPath: (value: { name: string; filePath: string }) => mutate<ComposeSource>('/compose-sources/from-path', 'POST', value),
   uploadCompose: (value: { name: string; fileName: string; content: string }) => mutate<ComposeSource>('/compose-sources/upload', 'POST', value),
@@ -101,4 +101,6 @@ export const api = {
     mutate<MIGLayout>(`/mig/layouts/${encodeURIComponent(gpuUuid)}`, 'PUT', value),
   rebootHost: () => mutate<void>('/host/reboot', 'POST'),
   markNotificationRead: (id: string) => mutate<void>(`/notifications/${id}`, 'PATCH'),
+  markAllNotificationsRead: () => mutate<void>('/notifications/read-all', 'POST'),
+  clearNotifications: () => mutate<void>('/notifications', 'DELETE'),
 }

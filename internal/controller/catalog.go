@@ -439,3 +439,19 @@ func (s *Server) readNotification(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(204)
 }
+
+func (s *Server) markAllNotificationsRead(w http.ResponseWriter, r *http.Request) {
+	if err := s.store.MarkAllNotificationsRead(r.Context(), identityFrom(r.Context()).UserID); err != nil {
+		writeProblem(w, 500, "Update failed", err.Error())
+		return
+	}
+	w.WriteHeader(204)
+}
+
+func (s *Server) clearNotifications(w http.ResponseWriter, r *http.Request) {
+	if err := s.store.ClearNotifications(r.Context(), identityFrom(r.Context()).UserID); err != nil {
+		writeProblem(w, 500, "Clear failed", err.Error())
+		return
+	}
+	w.WriteHeader(204)
+}

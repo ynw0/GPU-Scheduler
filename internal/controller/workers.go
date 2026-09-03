@@ -133,7 +133,7 @@ func (s *Server) reconcileOnce(ctx context.Context) {
 			byJob[claim.ManagedJobID] = append(byJob[claim.ManagedJobID], claim)
 		}
 	}
-	active, err := s.store.ListJobsByState(ctx, domain.JobRunning, domain.JobStarting, domain.JobCreating, domain.JobStopping, domain.JobDrifted, domain.JobDegraded)
+	active, err := s.store.ListJobsByState(ctx, domain.JobRunning, domain.JobPaused, domain.JobStarting, domain.JobCreating, domain.JobStopping, domain.JobDrifted, domain.JobDegraded)
 	if err != nil {
 		return
 	}
@@ -165,6 +165,12 @@ func (s *Server) reconcileOnce(ctx context.Context) {
 			if _, isDrift := drifted[job.ID]; isDrift {
 				_ = s.store.TransitionJob(ctx, job.ID, domain.JobDrifted)
 				s.events.Publish("job", job)
+			}
+		case domain.JobPaused:
+			if len(claimsForJob) == 0 {
+				s.finishJob(ctx, job, domain.JobOrphaned, "暂停后找不到对应容器")
+			} else if allExited(claimsForJob) {
+				s.finishJob(ctx, job, domain.JobFailed, "暂停任务容器已退出")
 			}
 		case domain.JobStopping:
 			if len(claimsForJob) == 0 || allExited(claimsForJob) {

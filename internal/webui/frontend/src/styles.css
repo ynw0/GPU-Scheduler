@@ -143,13 +143,17 @@ h1 { font-size: 25px; margin-bottom: 0; letter-spacing: -.025em; font-weight: 60
 
 .text-button { border: 0; background: transparent; color: var(--green); font-size: 12px; font-weight: 600; }
 .text-button:hover { text-decoration: underline; }
+.text-button:disabled { opacity: .4; text-decoration: none; }
 .job-table { padding: 0 15px 13px; }
 .job-row { min-height: 50px; display: grid; grid-template-columns: 1.5fr .8fr .45fr .7fr; align-items: center; gap: 9px; border-bottom: 1px solid var(--line-soft); font-size: 12px; color: var(--text); }
 .job-row.header { min-height: 37px; color: var(--muted); font: 11px 'Cascadia Mono', 'JetBrains Mono', monospace; letter-spacing: .06em; }
 .job-name { display: flex; align-items: center; gap: 8px; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .job-name i { flex: 0 0 auto; width: 6px; height: 6px; background: var(--green); border-radius: 50%; }
 .status-pill { display: inline-block; padding: 4px 6px; font: 10px 'Cascadia Mono', 'JetBrains Mono', monospace; color: var(--text); border: 1px solid var(--line); background: var(--panel-2); }
-.status-running { color: var(--green); border-color: #9dcfb2; background: #e8f6ee; }.status-queued { color: var(--amber); border-color: #e0b48a; background: #fff6ec; }.status-failed { color: var(--danger); border-color: #e7c2bd; background: #fdecea; }
+.status-running { color: var(--green); border-color: #9dcfb2; background: #e8f6ee; }
+.status-paused { color: var(--amber); border-color: #e0b48a; background: #fff6ec; }
+.status-queued { color: var(--amber); border-color: #e0b48a; background: #fff6ec; }
+.status-failed { color: var(--danger); border-color: #e7c2bd; background: #fdecea; }
 .priority { font: 600 12px 'Cascadia Mono', 'JetBrains Mono', monospace; color: var(--text); }.muted { color: var(--muted); font-family: 'Cascadia Mono', 'JetBrains Mono', monospace; }
 .empty-row { height: 165px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; color: var(--muted); font-size: 13px; }
 .empty-topology { grid-column: 1 / -1; min-height: 340px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; color: var(--muted); }
@@ -203,7 +207,7 @@ h1 { font-size: 25px; margin-bottom: 0; letter-spacing: -.025em; font-weight: 60
 .host-group-heading { padding: 16px 20px 4px; display: flex; align-items: baseline; justify-content: space-between; }
 .host-group-heading h3 { margin: 0; font-size: 13px; font-weight: 600; }
 .host-group-heading span { color: var(--muted); font: 12px 'Cascadia Mono', 'JetBrains Mono', monospace; }
-.full-job-row { min-height: 58px; display: grid; grid-template-columns: 1.7fr .7fr .5fr 1fr 1fr; align-items: center; gap: 14px; border-bottom: 1px solid var(--line-soft); font-size: 13px; color: var(--text); }
+.full-job-row { min-height: 58px; display: grid; grid-template-columns: 1.7fr .7fr .5fr 1fr 1.3fr; align-items: center; gap: 14px; border-bottom: 1px solid var(--line-soft); font-size: 13px; color: var(--text); }
 .full-job-row.header { min-height: 42px; color: var(--muted); font: 11px 'Cascadia Mono', monospace; letter-spacing: .06em; }
 .full-job-row .job-name small { color: var(--muted); font: 11px 'Cascadia Mono', monospace; margin-left: auto; }
 .host-row { min-height: 76px; padding: 10px 0; display: grid; grid-template-columns: 1.4fr .7fr .7fr 1.7fr .6fr .6fr .45fr .7fr; align-items: center; gap: 12px; border-bottom: 1px solid var(--line-soft); font-size: 13px; color: var(--text); }
@@ -305,9 +309,11 @@ h1 { font-size: 25px; margin-bottom: 0; letter-spacing: -.025em; font-weight: 60
 .user-actions { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
 .user-actions input { width: 140px; }
 .notify-drawer { position: fixed; right: 0; top: 0; bottom: 0; width: 360px; z-index: 40; border-left: 1px solid var(--line); background: var(--panel); padding: 22px 18px; overflow: auto; }
-.notify-drawer h3 { margin: 0 0 18px; color: var(--text); }
+.notify-drawer h3 { margin: 0 0 10px; color: var(--text); }
+.notify-actions { display: flex; gap: 12px; margin-bottom: 16px; }
 .notify-item { width: 100%; text-align: left; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); padding: 12px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 6px; cursor: pointer; }
 .notify-item strong { font-size: 13px; }
 .notify-item span { color: var(--muted); font-size: 12px; }
 .notify-item.read { opacity: .7; }
 .full-job-row { cursor: default; }
+.job-ops { display: flex; flex-wrap: wrap; gap: 4px 10px; }

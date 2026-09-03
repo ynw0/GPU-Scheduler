@@ -102,6 +102,8 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /api/v1/host/reboot", s.protected(s.requireAdmin(s.rebootHost), true))
 	s.mux.Handle("GET /api/v1/audit-events", s.protected(s.requireAudit(s.listAudit), false))
 	s.mux.Handle("GET /api/v1/notifications", s.protected(http.HandlerFunc(s.listNotifications), false))
+	s.mux.Handle("POST /api/v1/notifications/read-all", s.protected(http.HandlerFunc(s.markAllNotificationsRead), true))
+	s.mux.Handle("DELETE /api/v1/notifications", s.protected(http.HandlerFunc(s.clearNotifications), true))
 	s.mux.Handle("PATCH /api/v1/notifications/{id}", s.protected(http.HandlerFunc(s.readNotification), true))
 	assets, err := fs.Sub(webui.Assets, "dist")
 	if err != nil {

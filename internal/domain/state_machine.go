@@ -8,14 +8,15 @@ var allowedTransitions = map[JobState]map[JobState]struct{}{
 	JobReserved:  {JobCreating: {}, JobQueued: {}, JobFailed: {}, JobCanceled: {}},
 	JobCreating:  {JobStarting: {}, JobFailed: {}, JobCanceled: {}},
 	JobStarting:  {JobRunning: {}, JobFailed: {}, JobDegraded: {}, JobCanceled: {}},
-	JobRunning:   {JobStopping: {}, JobSucceeded: {}, JobFailed: {}, JobDrifted: {}, JobDegraded: {}},
+	JobRunning:   {JobStopping: {}, JobPaused: {}, JobSucceeded: {}, JobFailed: {}, JobDrifted: {}, JobDegraded: {}},
+	JobPaused:    {JobRunning: {}, JobStopping: {}, JobFailed: {}, JobOrphaned: {}},
 	JobStopping:  {JobSucceeded: {}, JobFailed: {}, JobCanceled: {}},
-	JobDrifted:   {JobRunning: {}, JobStopping: {}, JobFailed: {}, JobOrphaned: {}},
-	JobDegraded:  {JobRunning: {}, JobStopping: {}, JobFailed: {}, JobOrphaned: {}},
-	JobOrphaned:  {JobFailed: {}, JobCanceled: {}},
+	JobDrifted:   {JobRunning: {}, JobPaused: {}, JobStopping: {}, JobFailed: {}, JobOrphaned: {}},
+	JobDegraded:  {JobRunning: {}, JobPaused: {}, JobStopping: {}, JobFailed: {}, JobOrphaned: {}},
+	JobOrphaned:  {JobFailed: {}, JobCanceled: {}, JobQueued: {}},
 	JobSucceeded: {},
 	JobFailed:    {JobQueued: {}},
-	JobCanceled:  {},
+	JobCanceled:  {JobQueued: {}},
 }
 
 func ValidateTransition(from, to JobState) error {

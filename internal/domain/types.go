@@ -30,6 +30,7 @@ const (
 	JobCreating  JobState = "CREATING"
 	JobStarting  JobState = "STARTING"
 	JobRunning   JobState = "RUNNING"
+	JobPaused    JobState = "PAUSED"
 	JobStopping  JobState = "STOPPING"
 	JobSucceeded JobState = "SUCCEEDED"
 	JobFailed    JobState = "FAILED"

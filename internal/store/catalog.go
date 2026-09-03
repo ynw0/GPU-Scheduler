@@ -322,8 +322,20 @@ func (s *Store) ListNotifications(ctx context.Context, userID string) ([]domain.
 }
 
 func (s *Store) MarkNotificationRead(ctx context.Context, id, userID string) error {
-	_, err := s.db.ExecContext(ctx, "UPDATE notifications SET read_at=? WHERE id=? AND user_id=?",
+	_, err := s.db.ExecContext(ctx, "UPDATE notifications SET read_at=? WHERE id=? AND (user_id=? OR user_id IS NULL)",
 		time.Now().UTC().Format(time.RFC3339Nano), id, userID)
+	return err
+}
+
+func (s *Store) MarkAllNotificationsRead(ctx context.Context, userID string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE notifications SET read_at=?
+        WHERE (user_id=? OR user_id IS NULL) AND read_at IS NULL`,
+		time.Now().UTC().Format(time.RFC3339Nano), userID)
+	return err
+}
+
+func (s *Store) ClearNotifications(ctx context.Context, userID string) error {
+	_, err := s.db.ExecContext(ctx, "DELETE FROM notifications WHERE user_id=? OR user_id IS NULL", userID)
 	return err
 }
 

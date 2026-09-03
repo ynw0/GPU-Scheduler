@@ -67,6 +67,8 @@ export interface Availability {
   memoryByNuma: Record<string, number>
 }
 
+export type JobAction = 'start' | 'pause' | 'resume' | 'stop' | 'retry'
+
 export interface Job {
   id: string
   name: string
