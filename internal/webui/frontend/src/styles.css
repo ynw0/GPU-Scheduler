@@ -145,7 +145,7 @@ h1 { font-size: 25px; margin-bottom: 0; letter-spacing: -.025em; font-weight: 60
 .text-button:hover { text-decoration: underline; }
 .text-button:disabled { opacity: .4; text-decoration: none; }
 .job-table { padding: 0 15px 13px; }
-.job-row { min-height: 50px; display: grid; grid-template-columns: 1.5fr .8fr .45fr .7fr; align-items: center; gap: 9px; border-bottom: 1px solid var(--line-soft); font-size: 12px; color: var(--text); }
+.job-row { min-height: 50px; display: grid; grid-template-columns: 1.3fr .7fr .4fr .65fr .95fr; align-items: center; gap: 9px; border-bottom: 1px solid var(--line-soft); font-size: 12px; color: var(--text); }
 .job-row.header { min-height: 37px; color: var(--muted); font: 11px 'Cascadia Mono', 'JetBrains Mono', monospace; letter-spacing: .06em; }
 .job-name { display: flex; align-items: center; gap: 8px; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .job-name i { flex: 0 0 auto; width: 6px; height: 6px; background: var(--green); border-radius: 50%; }
@@ -212,7 +212,7 @@ h1 { font-size: 25px; margin-bottom: 0; letter-spacing: -.025em; font-weight: 60
 .full-job-row .job-name small { color: var(--muted); font: 11px 'Cascadia Mono', monospace; margin-left: auto; }
 .host-row { min-height: 76px; padding: 10px 0; display: grid; grid-template-columns: 1.4fr .7fr .7fr 1.7fr .6fr .6fr .45fr .7fr; align-items: center; gap: 12px; border-bottom: 1px solid var(--line-soft); font-size: 13px; color: var(--text); }
 .host-row.header { min-height: 42px; padding: 0; color: var(--muted); font: 11px 'Cascadia Mono', monospace; letter-spacing: .06em; }
-.host-row.internal { grid-template-columns: 1.4fr .7fr .7fr 2fr .7fr .9fr; }
+.host-row.internal { grid-template-columns: 1.4fr .7fr .7fr 1.7fr .6fr .8fr .9fr; }
 .host-priority { height: 28px; border: 1px solid var(--input-line); background: var(--input); color: var(--text); font: 12px 'Cascadia Mono', monospace; }
 .host-tip { position: relative; display: inline-block; color: var(--text); cursor: help; border-bottom: 1px dotted var(--muted); }
 .host-tip-box { display: none; position: absolute; left: 0; top: calc(100% + 8px); z-index: 8; min-width: 220px; max-width: 380px; padding: 10px 12px; border: 1px solid var(--line); background: var(--panel); color: var(--text); font: 12px 'Cascadia Mono', monospace; line-height: 1.55; white-space: pre-wrap; box-shadow: 0 14px 36px rgba(20,33,27,.18); }
@@ -316,4 +316,6 @@ h1 { font-size: 25px; margin-bottom: 0; letter-spacing: -.025em; font-weight: 60
 .notify-item span { color: var(--muted); font-size: 12px; }
 .notify-item.read { opacity: .7; }
 .full-job-row { cursor: default; }
-.job-ops { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.job-ops { display: flex; flex-wrap: wrap; gap: 6px; }
+.job-op { height: 26px; padding: 0 8px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font-size: 12px; font-weight: 600; cursor: pointer; }
+.job-op:hover { border-color: var(--green); color: var(--green); }

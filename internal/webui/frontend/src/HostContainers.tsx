@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Box } from 'lucide-react'
 import { api } from './api'
-import type { GPU, HostContainer, User } from './types'
+import type { GPU, HostContainer, JobAction, User } from './types'
 
 function formatBytes(value = 0): string {
   if (!value) return '0 GB'
@@ -130,7 +130,15 @@ function ContainerName({ item }: { item: HostContainer }) {
   )
 }
 
-export function HostContainersPage({ role, gpus = [], onOpenJob }: { role: User['role']; gpus?: GPU[]; onOpenJob: (id: string) => void }) {
+export function HostContainersPage({
+  role, gpus = [], canWrite, onOpenJob, onJobAction,
+}: {
+  role: User['role']
+  gpus?: GPU[]
+  canWrite: boolean
+  onOpenJob: (id: string) => void
+  onJobAction: (id: string, name: JobAction) => void
+}) {
   const queryClient = useQueryClient()
   const items = useQuery({ queryKey: ['host-containers'], queryFn: api.hostContainers, refetchInterval: 10_000 })
   const refresh = () => { void queryClient.invalidateQueries({ queryKey: ['host-containers'] }) }
@@ -170,7 +178,7 @@ export function HostContainersPage({ role, gpus = [], onOpenJob }: { role: User[
         </div>
         <div className="full-job-table">
           <div className="host-row internal header">
-            <span>容器</span><span>CPU 设置</span><span>GPU 设置</span><span>当前占用</span><span>状态</span><span>任务</span>
+            <span>容器</span><span>CPU 设置</span><span>GPU 设置</span><span>当前占用</span><span>状态</span><span>任务</span><span>操作</span>
           </div>
           {internal.map((item) => {
             const cpu = cpuSetting(item)
@@ -185,6 +193,17 @@ export function HostContainersPage({ role, gpus = [], onOpenJob }: { role: User[
                 {item.managedJobId ? (
                   <button className="text-button" onClick={() => onOpenJob(item.managedJobId!)}>{item.jobName || item.managedJobId.slice(0, 8)}</button>
                 ) : <span>—</span>}
+                <span className="job-ops">
+                  {canWrite && item.managedJobId && item.state === 'running' && (
+                    <button className="job-op" type="button" onClick={() => onJobAction(item.managedJobId!, 'pause')}>暂停</button>
+                  )}
+                  {canWrite && item.managedJobId && item.state === 'paused' && (
+                    <button className="job-op" type="button" onClick={() => onJobAction(item.managedJobId!, 'resume')}>继续</button>
+                  )}
+                  {canWrite && item.managedJobId && (item.state === 'running' || item.state === 'paused') && (
+                    <button className="job-op" type="button" onClick={() => onJobAction(item.managedJobId!, 'stop')}>停止</button>
+                  )}
+                </span>
               </div>
             )
           })}
