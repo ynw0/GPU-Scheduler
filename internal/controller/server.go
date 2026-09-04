@@ -15,6 +15,7 @@ import (
 	"gpu-scheduler/internal/agentapi"
 	"gpu-scheduler/internal/auth"
 	"gpu-scheduler/internal/config"
+	"gpu-scheduler/internal/domain"
 	"gpu-scheduler/internal/notification"
 	"gpu-scheduler/internal/scheduler"
 	"gpu-scheduler/internal/store"
@@ -65,11 +66,11 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /api/v1/metrics/host", s.protected(http.HandlerFunc(s.getHostMetrics), false))
 	s.mux.Handle("GET /api/v1/images", s.protected(http.HandlerFunc(s.getImages), false))
 	s.mux.Handle("GET /api/v1/platform", s.protected(http.HandlerFunc(s.getPlatform), false))
-	s.mux.Handle("GET /api/v1/unmanaged-containers", s.protected(http.HandlerFunc(s.getUnmanaged), false))
-	s.mux.Handle("PATCH /api/v1/unmanaged-containers/{id}", s.protected(s.requireAdmin(s.patchHostContainer), true))
-	s.mux.Handle("POST /api/v1/unmanaged-containers/{id}/stop", s.protected(s.requireAdmin(s.stopHostContainer), true))
-	s.mux.Handle("POST /api/v1/unmanaged-containers/{id}/pause", s.protected(s.requireAdmin(s.pauseHostContainer), true))
-	s.mux.Handle("POST /api/v1/unmanaged-containers/{id}/unpause", s.protected(s.requireAdmin(s.unpauseHostContainer), true))
+	s.mux.Handle("GET /api/v1/unmanaged-containers", s.protected(s.requirePerm(domain.PermHostView, s.getUnmanaged), false))
+	s.mux.Handle("PATCH /api/v1/unmanaged-containers/{id}", s.protected(s.requirePerm(domain.PermHostControl, s.patchHostContainer), true))
+	s.mux.Handle("POST /api/v1/unmanaged-containers/{id}/stop", s.protected(s.requirePerm(domain.PermHostControl, s.stopHostContainer), true))
+	s.mux.Handle("POST /api/v1/unmanaged-containers/{id}/pause", s.protected(s.requirePerm(domain.PermHostControl, s.pauseHostContainer), true))
+	s.mux.Handle("POST /api/v1/unmanaged-containers/{id}/unpause", s.protected(s.requirePerm(domain.PermHostControl, s.unpauseHostContainer), true))
 	s.mux.Handle("POST /api/v1/job-plans", s.protected(http.HandlerFunc(s.planJob), true))
 	s.mux.Handle("GET /api/v1/jobs", s.protected(http.HandlerFunc(s.listJobs), false))
 	s.mux.Handle("POST /api/v1/jobs", s.protected(http.HandlerFunc(s.createJob), true))
@@ -80,28 +81,30 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /api/v1/jobs/{jobId}/logs/stream", s.protected(http.HandlerFunc(s.streamLogs), false))
 	s.mux.Handle("GET /api/v1/events/stream", s.protected(http.HandlerFunc(s.streamEvents), false))
 	s.mux.Handle("GET /api/v1/compose-sources", s.protected(http.HandlerFunc(s.listComposeSources), false))
-	s.mux.Handle("POST /api/v1/compose-sources", s.protected(s.requireAdmin(s.createComposeSource), true))
+	s.mux.Handle("POST /api/v1/compose-sources", s.protected(s.requirePerm(domain.PermAdminCompose, s.createComposeSource), true))
 	s.mux.Handle("POST /api/v1/compose-sources/from-path", s.protected(http.HandlerFunc(s.createComposeFromPath), true))
 	s.mux.Handle("POST /api/v1/compose-sources/upload", s.protected(http.HandlerFunc(s.uploadComposeSource), true))
-	s.mux.Handle("PATCH /api/v1/compose-sources/{id}", s.protected(s.requireAdmin(s.updateComposeSource), true))
-	s.mux.Handle("GET /api/v1/templates", s.protected(http.HandlerFunc(s.listTemplates), false))
+	s.mux.Handle("PATCH /api/v1/compose-sources/{id}", s.protected(s.requirePerm(domain.PermAdminCompose, s.updateComposeSource), true))
+	s.mux.Handle("GET /api/v1/templates", s.protected(s.requireAny([]string{domain.PermTemplatesUse, domain.PermTemplatesWrite}, s.listTemplates), false))
 	s.mux.Handle("POST /api/v1/templates", s.protected(http.HandlerFunc(s.createTemplate), true))
 	s.mux.Handle("PATCH /api/v1/templates/{id}", s.protected(http.HandlerFunc(s.updateTemplate), true))
-	s.mux.Handle("GET /api/v1/teams", s.protected(s.requireAdmin(s.listTeams), false))
-	s.mux.Handle("POST /api/v1/teams", s.protected(s.requireAdmin(s.createTeam), true))
-	s.mux.Handle("GET /api/v1/users", s.protected(s.requireAdmin(s.listUsers), false))
-	s.mux.Handle("POST /api/v1/users", s.protected(s.requireAdmin(s.createUser), true))
-	s.mux.Handle("PATCH /api/v1/users/{id}", s.protected(s.requireAdmin(s.updateUser), true))
-	s.mux.Handle("POST /api/v1/users/{id}/password", s.protected(s.requireAdmin(s.resetUserPassword), true))
-	s.mux.Handle("GET /api/v1/quotas", s.protected(s.requireAdmin(s.listQuotas), false))
-	s.mux.Handle("POST /api/v1/quotas", s.protected(s.requireAdmin(s.upsertQuota), true))
-	s.mux.Handle("PATCH /api/v1/quotas/{id}", s.protected(s.requireAdmin(s.upsertQuota), true))
+	s.mux.Handle("GET /api/v1/teams", s.protected(s.requireAny([]string{domain.PermAdminUsers, domain.PermAdminTeams, domain.PermAdminQuotas}, s.listTeams), false))
+	s.mux.Handle("POST /api/v1/teams", s.protected(s.requirePerm(domain.PermAdminTeams, s.createTeam), true))
+	s.mux.Handle("GET /api/v1/users", s.protected(s.requireAny([]string{domain.PermAdminUsers, domain.PermAdminQuotas}, s.listUsers), false))
+	s.mux.Handle("POST /api/v1/users", s.protected(s.requirePerm(domain.PermAdminUsers, s.createUser), true))
+	s.mux.Handle("PATCH /api/v1/users/{id}", s.protected(s.requirePerm(domain.PermAdminUsers, s.updateUser), true))
+	s.mux.Handle("POST /api/v1/users/{id}/password", s.protected(s.requirePerm(domain.PermAdminUsers, s.resetUserPassword), true))
+	s.mux.Handle("GET /api/v1/quotas", s.protected(s.requirePerm(domain.PermAdminQuotas, s.listQuotas), false))
+	s.mux.Handle("POST /api/v1/quotas", s.protected(s.requirePerm(domain.PermAdminQuotas, s.upsertQuota), true))
+	s.mux.Handle("PATCH /api/v1/quotas/{id}", s.protected(s.requirePerm(domain.PermAdminQuotas, s.upsertQuota), true))
 	s.mux.Handle("GET /api/v1/resource-pools", s.protected(http.HandlerFunc(s.listPools), false))
-	s.mux.Handle("POST /api/v1/resource-pools", s.protected(s.requireAdmin(s.createPool), true))
-	s.mux.Handle("GET /api/v1/mig/layouts", s.protected(s.requireAdmin(s.listMIGLayouts), false))
-	s.mux.Handle("PUT /api/v1/mig/layouts/{gpuUuid}", s.protected(s.requireAdmin(s.applyMIGLayout), true))
-	s.mux.Handle("POST /api/v1/host/reboot", s.protected(s.requireAdmin(s.rebootHost), true))
-	s.mux.Handle("GET /api/v1/audit-events", s.protected(s.requireAudit(s.listAudit), false))
+	s.mux.Handle("POST /api/v1/resource-pools", s.protected(s.requirePerm(domain.PermAdminPools, s.createPool), true))
+	s.mux.Handle("GET /api/v1/mig/layouts", s.protected(s.requirePerm(domain.PermAdminMIG, s.listMIGLayouts), false))
+	s.mux.Handle("PUT /api/v1/mig/layouts/{gpuUuid}", s.protected(s.requirePerm(domain.PermAdminMIG, s.applyMIGLayout), true))
+	s.mux.Handle("POST /api/v1/host/reboot", s.protected(s.requirePerm(domain.PermAdminReboot, s.rebootHost), true))
+	s.mux.Handle("GET /api/v1/audit-events", s.protected(s.requirePerm(domain.PermAdminAudit, s.listAudit), false))
+	s.mux.Handle("GET /api/v1/role-permissions", s.protected(s.requirePerm(domain.PermAdminRoles, s.listRolePermissions), false))
+	s.mux.Handle("PUT /api/v1/role-permissions", s.protected(s.requirePerm(domain.PermAdminRoles, s.saveRolePermissions), true))
 	s.mux.Handle("GET /api/v1/notifications", s.protected(http.HandlerFunc(s.listNotifications), false))
 	s.mux.Handle("POST /api/v1/notifications/read-all", s.protected(http.HandlerFunc(s.markAllNotificationsRead), true))
 	s.mux.Handle("DELETE /api/v1/notifications", s.protected(http.HandlerFunc(s.clearNotifications), true))
@@ -132,6 +135,10 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		Name: "gpu_scheduler_csrf", Value: result.CSRFToken, Path: "/", Secure: true,
 		SameSite: http.SameSiteStrictMode, Expires: result.ExpiresAt,
 	})
+	if err := s.attachPermissions(r.Context(), &result.Identity); err != nil {
+		writeProblem(w, 500, "Permissions unavailable", err.Error())
+		return
+	}
 	writeJSON(w, 200, result.Identity)
 }
 
@@ -249,28 +256,40 @@ func (s *Server) protected(next http.Handler, csrf bool) http.Handler {
 			writeProblem(w, 403, "CSRF validation failed", "")
 			return
 		}
+		if err := s.attachPermissions(r.Context(), &identity); err != nil {
+			writeProblem(w, 500, "Permissions unavailable", err.Error())
+			return
+		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), identityKey{}, identity)))
 	})
 }
 
-func (s *Server) requireAdmin(next http.HandlerFunc) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if identityFrom(r.Context()).Role != "Admin" {
-			writeProblem(w, 403, "Forbidden", "")
-			return
-		}
-		next(w, r)
-	})
+func (s *Server) attachPermissions(ctx context.Context, identity *auth.Identity) error {
+	perms, err := s.store.PermissionsForRole(ctx, identity.Role)
+	if err != nil {
+		return err
+	}
+	if perms == nil {
+		perms = []string{}
+	}
+	identity.Permissions = perms
+	return nil
 }
 
-func (s *Server) requireAudit(next http.HandlerFunc) http.Handler {
+func (s *Server) requirePerm(perm string, next http.HandlerFunc) http.Handler {
+	return s.requireAny([]string{perm}, next)
+}
+
+func (s *Server) requireAny(perms []string, next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		role := identityFrom(r.Context()).Role
-		if role != "Admin" && role != "Auditor" {
-			writeProblem(w, 403, "Forbidden", "")
-			return
+		identity := identityFrom(r.Context())
+		for _, perm := range perms {
+			if identity.Has(perm) {
+				next(w, r)
+				return
+			}
 		}
-		next(w, r)
+		writeProblem(w, 403, "Forbidden", "")
 	})
 }
 

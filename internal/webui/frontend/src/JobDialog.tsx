@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, CircleGauge, Cpu, Gauge, HardDrive, LayoutGrid, X } from 'lucide-react'
 import { api } from './api'
 import { cpuPercentOf, cpuSelectable, selectedGPUNuma, threadTone } from './numa'
 import { emptyImageFields, imageFieldsFromWorkload, JobImageFields, parseEnvironment, type ImageFields } from './JobImageFields'
 import { existingMigProfiles, gpuDeviceLabel, idleMigProfiles, migInstances, wholeGPUs } from './gpuLabel'
-import type { ImageWorkload, JobPlan, JobSpec, ResourceRequest, Topology, User } from './types'
+import { hasPerm, type ImageWorkload, type JobPlan, type JobSpec, type ResourceRequest, type Topology, type User } from './types'
 
 function emptyResources(): ResourceRequest {
   return { cpuMode: 'auto-cores', cpuCount: 8, gpuKind: 'whole', gpuMode: 'auto', gpuCount: 1, memoryBytes: 64 * 1024 ** 3, numaPolicy: 'strict' }
@@ -19,12 +19,12 @@ function specResources(spec?: JobSpec): ResourceRequest {
   return spec.resources
 }
 
-function canUseP0(role?: User['role']): boolean {
-  return role === 'Admin' || role === 'TeamOperator'
+function canUseP0(user?: User): boolean {
+  return hasPerm(user, 'jobs.priorityP0')
 }
 
-function clampPriority(role: User['role'] | undefined, priority: JobSpec['priority']): JobSpec['priority'] {
-  if (priority === 'P0' && !canUseP0(role)) return 'P1'
+function clampPriority(user: User | undefined, priority: JobSpec['priority']): JobSpec['priority'] {
+  if (priority === 'P0' && !canUseP0(user)) return 'P1'
   return priority
 }
 
@@ -41,7 +41,12 @@ export function NewJobDialog({ topology, freeCPUIds, freeGPUUUIDs, cpuPercentByI
   const images = useQuery({ queryKey: ['images'], queryFn: api.images, refetchInterval: false })
   const sources = useQuery({ queryKey: ['compose-sources'], queryFn: api.composeSources, refetchInterval: false })
   const pools = useQuery({ queryKey: ['resource-pools'], queryFn: api.resourcePools, refetchInterval: false })
-  const templates = useQuery({ queryKey: ['templates'], queryFn: api.templates, refetchInterval: false })
+  const templates = useQuery({
+    queryKey: ['templates'],
+    queryFn: api.templates,
+    refetchInterval: false,
+    enabled: hasPerm(me.data, 'templates.use') || hasPerm(me.data, 'templates.write'),
+  })
   const platform = useQuery({ queryKey: ['platform'], queryFn: api.platform, refetchInterval: false })
   const seed = specResources(initialSpec)
   const [kind, setKind] = useState<'image' | 'compose'>(initialSpec?.workload.kind ?? 'image')
@@ -55,7 +60,7 @@ export function NewJobDialog({ topology, freeCPUIds, freeGPUUUIDs, cpuPercentByI
   const [composeFileName, setComposeFileName] = useState('compose.yaml')
   const [composeContent, setComposeContent] = useState('')
   const [serviceName, setServiceName] = useState(initialSpec?.workload.kind === 'compose' ? (initialSpec.workload.services[0]?.name ?? 'train') : 'train')
-  const [priority, setPriority] = useState<JobSpec['priority']>(clampPriority(me.data?.role, initialSpec?.priority ?? 'P2'))
+  const [priority, setPriority] = useState<JobSpec['priority']>(initialSpec?.priority ?? 'P2')
   const [resourcePoolId, setResourcePoolId] = useState(initialSpec?.resourcePoolId ?? '')
   const [templateName, setTemplateName] = useState('')
   const [loadTemplateId, setLoadTemplateId] = useState('')
@@ -73,6 +78,10 @@ export function NewJobDialog({ topology, freeCPUIds, freeGPUUUIDs, cpuPercentByI
   const [memoryGB, setMemoryGB] = useState(Math.max(1, Math.round(seed.memoryBytes / 1024 ** 3)))
   const [plan, setPlan] = useState<JobPlan>()
   const [planKey, setPlanKey] = useState('')
+  useEffect(() => {
+    if (!me.data) return
+    setPriority((current) => clampPriority(me.data, current))
+  }, [me.data])
 
   const resources = (): ResourceRequest => ({
     cpuMode, cpuCount: cpuMode === 'manual-threads' ? selectedCPUs.length : cpuCount,
@@ -110,7 +119,7 @@ export function NewJobDialog({ topology, freeCPUIds, freeGPUUUIDs, cpuPercentByI
   }
 
   const buildSpec = (): JobSpec => ({
-    name, priority: clampPriority(me.data?.role, priority),
+    name, priority: clampPriority(me.data, priority),
     workload: kind === 'image' ? imageWorkload() : {
       kind: 'compose', composeSourceId,
       services: [{ name: serviceName, class: 'training', resources: resources() }],
@@ -123,7 +132,7 @@ export function NewJobDialog({ topology, freeCPUIds, freeGPUUUIDs, cpuPercentByI
   const applySpec = (spec: JobSpec) => {
     const next = specResources(spec)
     setName(spec.name)
-    setPriority(clampPriority(me.data?.role, spec.priority))
+    setPriority(clampPriority(me.data, spec.priority))
     setKind(spec.workload.kind)
     setResourcePoolId(spec.resourcePoolId ?? '')
     setStopGraceSeconds(spec.stopGraceSeconds || 30)
@@ -256,9 +265,9 @@ export function NewJobDialog({ topology, freeCPUIds, freeGPUUUIDs, cpuPercentByI
               </div>
               <div className="field-grid two">
                 <label>任务名称<input value={name} onChange={(event) => setName(event.target.value)} placeholder="experiment-a800-01" /></label>
-                <label>优先级<select value={clampPriority(me.data?.role, priority)} onChange={(event) => setPriority(event.target.value as JobSpec['priority'])}>
+                <label>优先级<select value={clampPriority(me.data, priority)} onChange={(event) => setPriority(event.target.value as JobSpec['priority'])}>
                   <option>P2</option><option>P3</option><option>P1</option>
-                  {canUseP0(me.data?.role) && <option>P0</option>}
+                  {canUseP0(me.data) && <option>P0</option>}
                 </select></label>
               </div>
               <label>停止宽限（秒）<input type="number" min={1} value={stopGraceSeconds} onChange={(event) => { setStopGraceSeconds(Number(event.target.value)); setPlan(undefined) }} /></label>
@@ -268,29 +277,35 @@ export function NewJobDialog({ topology, freeCPUIds, freeGPUUUIDs, cpuPercentByI
                   <option key={pool.id} value={pool.id}>{pool.name} · {pool.gpuUuids.length} GPU · {pool.cpuIds.length} CPU</option>
                 ))}
               </select></label>
-              <div className="field-grid two">
-                <label>从模板加载<select value={loadTemplateId} onChange={(event) => {
-                  const item = (templates.data ?? []).find((template) => template.id === event.target.value)
-                  setLoadTemplateId('')
-                  if (item) {
-                    applySpec(item.spec)
-                    setActiveTemplateId(item.id)
-                    setActiveTemplateName(item.name)
-                  }
-                }}>
-                  <option value="">选择模板</option>
-                  {(templates.data ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                </select></label>
-                <label>存为模板
-                  <span className="inline-save">
-                    <input value={templateName} onChange={(event) => setTemplateName(event.target.value)} placeholder="模板名称" />
-                    <button type="button" className="text-button" disabled={!templateName.trim() || !name.trim() || saveTemplate.isPending} onClick={() => saveTemplate.mutate()}>
-                      {saveTemplate.isPending ? '保存中…' : '保存'}
-                    </button>
-                  </span>
-                </label>
-              </div>
-              {activeTemplateId && (
+              {(hasPerm(me.data, 'templates.use') || hasPerm(me.data, 'templates.write')) && (
+                <div className="field-grid two">
+                  {hasPerm(me.data, 'templates.use') && (
+                    <label>从模板加载<select value={loadTemplateId} onChange={(event) => {
+                      const item = (templates.data ?? []).find((template) => template.id === event.target.value)
+                      setLoadTemplateId('')
+                      if (item) {
+                        applySpec(item.spec)
+                        setActiveTemplateId(item.id)
+                        setActiveTemplateName(item.name)
+                      }
+                    }}>
+                      <option value="">选择模板</option>
+                      {(templates.data ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                    </select></label>
+                  )}
+                  {hasPerm(me.data, 'templates.write') && (
+                    <label>存为模板
+                      <span className="inline-save">
+                        <input value={templateName} onChange={(event) => setTemplateName(event.target.value)} placeholder="模板名称" />
+                        <button type="button" className="text-button" disabled={!templateName.trim() || !name.trim() || saveTemplate.isPending} onClick={() => saveTemplate.mutate()}>
+                          {saveTemplate.isPending ? '保存中…' : '保存'}
+                        </button>
+                      </span>
+                    </label>
+                  )}
+                </div>
+              )}
+              {hasPerm(me.data, 'templates.write') && activeTemplateId && (
                 <button
                   type="button"
                   className="text-button"
@@ -300,7 +315,7 @@ export function NewJobDialog({ topology, freeCPUIds, freeGPUUUIDs, cpuPercentByI
                   {overwriteTemplate.isPending ? '覆盖中…' : `覆盖模板「${activeTemplateName}」`}
                 </button>
               )}
-              {(saveTemplate.error || overwriteTemplate.error) && <div className="plan-conflict">{String((saveTemplate.error ?? overwriteTemplate.error)?.message)}</div>}
+              {hasPerm(me.data, 'templates.write') && (saveTemplate.error || overwriteTemplate.error) && <div className="plan-conflict">{String((saveTemplate.error ?? overwriteTemplate.error)?.message)}</div>}
               {kind === 'image' ? (
                 <JobImageFields
                   images={images.data ?? []}

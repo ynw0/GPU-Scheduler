@@ -1,6 +1,6 @@
 import type {
   AuditEvent, Availability, ComposeSource, Health, HostContainer, HostMetricSnapshot, ImageInfo, Job, JobAction,
-  JobMetricSnapshot, JobPlan, JobSpec, MIGLayout, Notification, Quota, ResourcePool, Team, Template, Topology, User,
+  JobMetricSnapshot, JobPlan, JobSpec, MIGLayout, Notification, Quota, ResourcePool, RolePermissionMatrix, Team, Template, Topology, User,
 } from './types'
 
 export class APIError extends Error {
@@ -104,4 +104,6 @@ export const api = {
   markNotificationRead: (id: string) => mutate<void>(`/notifications/${id}`, 'PATCH'),
   markAllNotificationsRead: () => mutate<void>('/notifications/read-all', 'POST'),
   clearNotifications: () => mutate<void>('/notifications', 'DELETE'),
+  rolePermissions: () => request<RolePermissionMatrix>('/role-permissions'),
+  saveRolePermissions: (roles: Record<string, string[]>) => mutate<RolePermissionMatrix>('/role-permissions', 'PUT', { roles }),
 }

@@ -27,7 +27,7 @@ import { JobDetail } from './JobDetail'
 import { NewJobDialog } from './JobDialog'
 import { AccountMenu } from './AccountMenu'
 import { cpuPercentOf, threadTone } from './numa'
-import { hostMemoryBytes, type GPU, type Job, type JobAction, type JobSpec, type LogicalCPU, type NUMANode, type Topology } from './types'
+import { hostMemoryBytes, hasAnyAdmin, hasPerm, type GPU, type Job, type JobAction, type JobSpec, type LogicalCPU, type NUMANode, type Topology } from './types'
 
 type Section = 'overview' | 'jobs' | 'host' | 'queue' | 'templates' | 'admin'
 
@@ -113,6 +113,19 @@ export function App() {
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['notifications'] }) },
   })
 
+  const visibleNav = navItems.filter((item) => {
+    if (!me.data) return item.id !== 'host' && item.id !== 'templates' && item.id !== 'admin'
+    if (item.id === 'host') return hasPerm(me.data, 'host.view')
+    if (item.id === 'templates') return hasPerm(me.data, 'templates.use') || hasPerm(me.data, 'templates.write')
+    if (item.id === 'admin') return hasAnyAdmin(me.data)
+    return true
+  })
+  const visibleNavKey = visibleNav.map((item) => item.id).join(',')
+  useEffect(() => {
+    if (!me.data) return
+    if (!visibleNav.some((item) => item.id === section)) setSection('overview')
+  }, [me.data, section, visibleNavKey])
+
   if (me.isLoading) return <BootScreen />
   if (!me.data) return <LoginScreen />
 
@@ -120,7 +133,9 @@ export function App() {
   const queued = (jobs.data ?? []).filter((job) => job.state === 'QUEUED')
   const unreadCount = (notifications.data ?? []).filter((item) => !item.readAt).length
   const isOffline = health.data?.agent === 'offline'
-  const canWrite = me.data.role === 'Admin' || me.data.role === 'TeamOperator' || me.data.role === 'User'
+  const canWrite = hasPerm(me.data, 'jobs.manage')
+  const canCreate = hasPerm(me.data, 'jobs.create')
+  const canUseTemplate = hasPerm(me.data, 'templates.use')
 
   return (
     <div className="shell">
@@ -130,7 +145,7 @@ export function App() {
           <span>GS</span>
         </div>
         <nav className="rail-nav" aria-label="主导航">
-          {navItems.map((item) => {
+          {visibleNav.map((item) => {
             const Icon = item.icon
             return (
               <button
@@ -159,7 +174,7 @@ export function App() {
         <header className="topbar">
           <div>
             <p className="eyebrow">GPU SCHEDULER / CONTROL PLANE</p>
-            <h1>{navItems.find((item) => item.id === section)?.label}</h1>
+            <h1>{visibleNav.find((item) => item.id === section)?.label}</h1>
           </div>
           <div className="topbar-actions">
             <div className={isOffline ? 'agent-state offline' : 'agent-state'}>
@@ -169,7 +184,7 @@ export function App() {
             <button className="icon-button" onClick={() => void topology.refetch()} aria-label="刷新">
               <RefreshCw size={17} />
             </button>
-            {canWrite && (
+            {canCreate && (
               <button className="primary-action" onClick={() => { setJobDraft(undefined); setNewJobOpen(true) }}><Plus size={17} />新建任务</button>
             )}
           </div>
@@ -219,7 +234,7 @@ export function App() {
           <SectionContent
             section={section}
             jobs={jobs.data ?? []}
-            role={me.data.role}
+            user={me.data}
             templates={templates.data ?? []}
             gpus={topology.data?.gpus ?? []}
             hostMemory={hostMemoryBytes(topology.data)}
@@ -227,6 +242,9 @@ export function App() {
             onUseTemplate={(spec) => { setJobDraft(spec); setNewJobOpen(true) }}
             onAction={(id, name) => action.mutate({ id, name })}
             canWrite={canWrite}
+            canCreate={canCreate}
+            canUseTemplate={canUseTemplate}
+            canHostControl={hasPerm(me.data, 'host.control')}
           />
         )}
       </main>
@@ -524,11 +542,11 @@ function EmptyTopology() {
 }
 
 function SectionContent({
-  section, jobs, role, templates, gpus, hostMemory, onOpenJob, onUseTemplate, onAction, canWrite,
+  section, jobs, user, templates, gpus, hostMemory, onOpenJob, onUseTemplate, onAction, canWrite, canCreate, canUseTemplate, canHostControl,
 }: {
   section: Section
   jobs: Job[]
-  role: import('./types').User['role']
+  user: import('./types').User
   templates: import('./types').Template[]
   gpus: GPU[]
   hostMemory: number
@@ -536,9 +554,12 @@ function SectionContent({
   onUseTemplate: (spec: JobSpec) => void
   onAction: (id: string, name: JobAction) => void
   canWrite: boolean
+  canCreate: boolean
+  canUseTemplate: boolean
+  canHostControl: boolean
 }) {
-  if (section === 'admin') return <AdminPage role={role} />
-  if (section === 'host') return <HostContainersPage role={role} gpus={gpus} hostMemory={hostMemory} canWrite={canWrite} onOpenJob={onOpenJob} onJobAction={onAction} />
+  if (section === 'admin') return <AdminPage user={user} />
+  if (section === 'host') return <HostContainersPage canHostControl={canHostControl} gpus={gpus} hostMemory={hostMemory} canWrite={canWrite} onOpenJob={onOpenJob} onJobAction={onAction} />
   if (section === 'templates') {
     return (
       <section className="workload-page overview-enter">
@@ -553,7 +574,7 @@ function SectionContent({
               <span>{item.spec.workload.kind}</span>
               <span className="muted">{new Date(item.updatedAt).toLocaleString('zh-CN')}</span>
               <span>
-                {canWrite && <button className="text-button" onClick={() => onUseTemplate(item.spec)}>使用</button>}
+                {canUseTemplate && canCreate && <button className="text-button" onClick={() => onUseTemplate(item.spec)}>使用</button>}
               </span>
             </div>
           ))}

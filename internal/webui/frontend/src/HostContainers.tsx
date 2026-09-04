@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Box } from 'lucide-react'
 import { api } from './api'
-import { realMemoryLimit, type GPU, type HostContainer, type JobAction, type User } from './types'
+import { realMemoryLimit, type GPU, type HostContainer, type JobAction } from './types'
 
 function formatBytes(value = 0): string {
   if (!value) return '0 GB'
@@ -132,9 +132,9 @@ function ContainerName({ item }: { item: HostContainer }) {
 }
 
 export function HostContainersPage({
-  role, gpus = [], hostMemory = 0, canWrite, onOpenJob, onJobAction,
+  canHostControl, gpus = [], hostMemory = 0, canWrite, onOpenJob, onJobAction,
 }: {
-  role: User['role']
+  canHostControl: boolean
   gpus?: GPU[]
   hostMemory?: number
   canWrite: boolean
@@ -160,7 +160,7 @@ export function HostContainersPage({
     mutationFn: (id: string) => api.unpauseHostContainer(id),
     onSuccess: refresh,
   })
-  const admin = role === 'Admin'
+  const admin = canHostControl
   const rows = items.data ?? []
   const internal = rows.filter((item) => item.managedJobId)
   const external = rows.filter((item) => !item.managedJobId)

@@ -13,12 +13,12 @@ import (
 	"gpu-scheduler/internal/domain"
 )
 
-func (s *Store) ListJobsVisible(ctx context.Context, userID, teamID string, role domain.Role) ([]domain.Job, error) {
+func (s *Store) ListJobsVisible(ctx context.Context, userID, teamID string, viewAll, viewTeam bool) ([]domain.Job, error) {
 	query := `SELECT id,name,state,priority,owner_id,COALESCE(team_id,''),spec_json,bypass_count,COALESCE(last_error,''),created_at,updated_at FROM jobs`
 	args := []any{}
-	switch role {
-	case domain.RoleAdmin, domain.RoleAuditor, domain.RoleViewer:
-	case domain.RoleTeamOperator:
+	switch {
+	case viewAll:
+	case viewTeam:
 		query += " WHERE team_id=?"
 		args = append(args, teamID)
 	default:

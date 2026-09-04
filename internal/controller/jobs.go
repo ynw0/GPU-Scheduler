@@ -16,13 +16,18 @@ import (
 )
 
 func (s *Server) planJob(w http.ResponseWriter, r *http.Request) {
+	identity := identityFrom(r.Context())
+	if !canCreateJobs(identity) {
+		writeProblem(w, 403, "Forbidden", "")
+		return
+	}
 	var spec domain.JobSpec
 	if err := json.NewDecoder(r.Body).Decode(&spec); err != nil {
 		writeProblem(w, 422, "Invalid job spec", err.Error())
 		return
 	}
 	normalizeJobSpec(&spec)
-	if err := validateJobSpec(spec, identityFrom(r.Context())); err != nil {
+	if err := validateJobSpec(spec, identity); err != nil {
 		writeProblem(w, 422, "Invalid job spec", err.Error())
 		return
 	}
@@ -157,7 +162,7 @@ func (s *Server) failExecution(ctx context.Context, jobID, attemptID string, err
 
 func (s *Server) listJobs(w http.ResponseWriter, r *http.Request) {
 	identity := identityFrom(r.Context())
-	jobs, err := s.store.ListJobsVisible(r.Context(), identity.UserID, identity.TeamID, identity.Role)
+	jobs, err := s.store.ListJobsVisible(r.Context(), identity.UserID, identity.TeamID, identity.Has(domain.PermJobsViewAll), identity.Has(domain.PermJobsViewTeam))
 	if err != nil {
 		writeProblem(w, 500, "List jobs failed", err.Error())
 		return
@@ -304,8 +309,8 @@ func validateJobSpec(spec domain.JobSpec, identity auth.Identity) error {
 	if strings.TrimSpace(spec.Name) == "" {
 		return errors.New("任务名称不能为空")
 	}
-	if spec.Priority == domain.PriorityEmergency && identity.Role != domain.RoleAdmin && identity.Role != domain.RoleTeamOperator {
-		return errors.New("P0 仅 TeamOperator 与 Admin 可用")
+	if spec.Priority == domain.PriorityEmergency && !identity.Has(domain.PermJobsPriorityP0) {
+		return errors.New("当前角色不能使用 P0")
 	}
 	if spec.Workload.Kind == domain.WorkloadCompose {
 		if spec.Workload.ComposeSourceID == "" {
@@ -381,29 +386,19 @@ func toServicePlan(name string, plan domain.JobPlan, request domain.ResourceRequ
 }
 
 func canAccessJob(identity auth.Identity, job domain.Job) bool {
-	switch identity.Role {
-	case domain.RoleAdmin, domain.RoleAuditor, domain.RoleViewer:
+	if identity.Has(domain.PermJobsViewAll) {
 		return true
-	case domain.RoleTeamOperator:
-		return identity.TeamID != "" && identity.TeamID == job.TeamID
-	default:
-		return identity.UserID == job.OwnerID
 	}
+	if identity.Has(domain.PermJobsViewTeam) && identity.TeamID != "" && identity.TeamID == job.TeamID {
+		return true
+	}
+	return identity.UserID == job.OwnerID
 }
 
 func canManageJob(identity auth.Identity, job domain.Job) bool {
-	switch identity.Role {
-	case domain.RoleAdmin:
-		return true
-	case domain.RoleTeamOperator:
-		return identity.TeamID != "" && identity.TeamID == job.TeamID
-	case domain.RoleUser:
-		return identity.UserID == job.OwnerID
-	default:
-		return false
-	}
+	return identity.Has(domain.PermJobsManage) && canAccessJob(identity, job)
 }
 
 func canCreateJobs(identity auth.Identity) bool {
-	return identity.Role == domain.RoleUser || identity.Role == domain.RoleTeamOperator || identity.Role == domain.RoleAdmin
+	return identity.Has(domain.PermJobsCreate)
 }

@@ -20,7 +20,7 @@ function layoutVisible(gpu: GPU, children: GPU[], enabled: boolean, profiles: st
   return sameProfiles(children.map((item) => item.profile || ''), profiles)
 }
 
-export function MigSettings() {
+export function MigSettings({ canReboot }: { canReboot: boolean }) {
   const queryClient = useQueryClient()
   const topology = useQuery({ queryKey: ['topology'], queryFn: api.topology })
   const layouts = useQuery({ queryKey: ['mig-layouts'], queryFn: api.migLayouts })
@@ -32,20 +32,22 @@ export function MigSettings() {
   return (
     <div className="mig-settings">
       <p className="field-hint">按卡切分。亮着的 1g/2g/3g/4g/7g 可直接选片数；例如 2g 选 ×3 后，只剩 1g 可再选 ×1。该卡有任务或容器时不能应用。切换 MIG 必须重启本机。</p>
-      <div className="mig-actions">
-        {!armed && (
-          <button type="button" className="secondary-action" disabled={reboot.isPending} onClick={() => setArmed(true)}>重启本机</button>
-        )}
-        {armed && (
-          <>
-            <span className="field-hint">将重启整台机器，所有任务会中断。</span>
-            <button type="button" className="text-button" onClick={() => setArmed(false)}>取消</button>
-            <button type="button" className="primary-action" disabled={reboot.isPending} onClick={() => reboot.mutate()}>
-              {reboot.isPending ? '正在重启…' : '确认重启'}
-            </button>
-          </>
-        )}
-      </div>
+      {canReboot && (
+        <div className="mig-actions">
+          {!armed && (
+            <button type="button" className="secondary-action" disabled={reboot.isPending} onClick={() => setArmed(true)}>重启本机</button>
+          )}
+          {armed && (
+            <>
+              <span className="field-hint">将重启整台机器，所有任务会中断。</span>
+              <button type="button" className="text-button" onClick={() => setArmed(false)}>取消</button>
+              <button type="button" className="primary-action" disabled={reboot.isPending} onClick={() => reboot.mutate()}>
+                {reboot.isPending ? '正在重启…' : '确认重启'}
+              </button>
+            </>
+          )}
+        </div>
+      )}
       {reboot.error && <div className="plan-conflict">{String(reboot.error.message)}</div>}
       {physical.map((gpu) => (
         <MigCard key={gpu.uuid} gpu={gpu} children={(topology.data?.gpus ?? []).filter((item) => item.parentUuid === gpu.uuid)} saved={saved.get(gpu.uuid)} onApplied={() => {

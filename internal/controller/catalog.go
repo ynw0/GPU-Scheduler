@@ -15,8 +15,8 @@ import (
 )
 
 func (s *Server) listComposeSources(w http.ResponseWriter, r *http.Request) {
-	admin := identityFrom(r.Context()).Role == domain.RoleAdmin
-	items, err := s.store.ListComposeSources(r.Context(), !admin)
+	enabledOnly := !identityFrom(r.Context()).Has(domain.PermAdminCompose)
+	items, err := s.store.ListComposeSources(r.Context(), enabledOnly)
 	if err != nil {
 		writeProblem(w, 500, "List compose sources failed", err.Error())
 		return
@@ -166,7 +166,7 @@ func (s *Server) updateComposeSource(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) listTemplates(w http.ResponseWriter, r *http.Request) {
 	identity := identityFrom(r.Context())
-	items, err := s.store.ListTemplates(r.Context(), identity.UserID, identity.Role == domain.RoleAdmin)
+	items, err := s.store.ListTemplates(r.Context(), identity.UserID, identity.Has(domain.PermJobsViewAll))
 	if err != nil {
 		writeProblem(w, 500, "List templates failed", err.Error())
 		return
@@ -179,7 +179,7 @@ func (s *Server) listTemplates(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) createTemplate(w http.ResponseWriter, r *http.Request) {
 	identity := identityFrom(r.Context())
-	if !canCreateJobs(identity) {
+	if !identity.Has(domain.PermTemplatesWrite) {
 		writeProblem(w, 403, "Forbidden", "")
 		return
 	}
@@ -206,7 +206,7 @@ func (s *Server) updateTemplate(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "Template not found", "")
 		return
 	}
-	if identity.Role != domain.RoleAdmin && item.OwnerID != identity.UserID {
+	if !identity.Has(domain.PermTemplatesWrite) || (item.OwnerID != identity.UserID && !identity.Has(domain.PermJobsViewAll)) {
 		writeProblem(w, 403, "Forbidden", "")
 		return
 	}

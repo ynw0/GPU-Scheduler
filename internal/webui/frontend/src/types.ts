@@ -12,6 +12,26 @@ export interface User {
   teamId?: string
   email?: string
   disabled?: boolean
+  permissions?: string[]
+}
+
+export function hasPerm(user: Pick<User, 'permissions'> | undefined, perm: string): boolean {
+  return Boolean(user?.permissions?.includes(perm))
+}
+
+export function hasAnyAdmin(user?: Pick<User, 'permissions'>): boolean {
+  return (user?.permissions ?? []).some((item) => item.startsWith('admin.'))
+}
+
+export interface PermissionDef {
+  id: string
+  group: string
+  label: string
+}
+
+export interface RolePermissionMatrix {
+  catalog: PermissionDef[]
+  roles: Record<string, string[]>
 }
 
 export interface LogicalCPU {

@@ -27,10 +27,15 @@ type Service struct {
 }
 
 type Identity struct {
-	UserID   string      `json:"id"`
-	Username string      `json:"username"`
-	Role     domain.Role `json:"role"`
-	TeamID   string      `json:"teamId,omitempty"`
+	UserID      string      `json:"id"`
+	Username    string      `json:"username"`
+	Role        domain.Role `json:"role"`
+	TeamID      string      `json:"teamId,omitempty"`
+	Permissions []string    `json:"permissions"`
+}
+
+func (i Identity) Has(perm string) bool {
+	return domain.HasPermission(i.Permissions, perm)
 }
 
 type LoginResult struct {

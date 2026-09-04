@@ -3,18 +3,39 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
 import { cpuSelectable, resourceNuma, selectedGPUNuma } from './numa'
 import { MigSettings } from './MigSettings'
-import type { ComposeSource, Team, User } from './types'
+import { RolePermissions } from './RolePermissions'
+import { hasPerm, type ComposeSource, type Team, type User } from './types'
 
-export function AdminPage({ role }: { role: User['role'] }) {
+const adminTabs = [
+  { id: 'users', perm: 'admin.users', label: '用户' },
+  { id: 'teams', perm: 'admin.teams', label: '团队' },
+  { id: 'quotas', perm: 'admin.quotas', label: '配额' },
+  { id: 'compose', perm: 'admin.compose', label: 'Compose' },
+  { id: 'pools', perm: 'admin.pools', label: '资源池' },
+  { id: 'mig', perm: 'admin.mig', label: 'MIG切分' },
+  { id: 'audit', perm: 'admin.audit', label: '审计' },
+  { id: 'roles', perm: 'admin.roles', label: '角色权限' },
+] as const
+
+type AdminTab = (typeof adminTabs)[number]['id']
+
+export function AdminPage({ user }: { user: User }) {
   const queryClient = useQueryClient()
-  const [tab, setTab] = useState<'users' | 'teams' | 'quotas' | 'compose' | 'pools' | 'mig' | 'audit'>('users')
-  const users = useQuery({ queryKey: ['users'], queryFn: api.users, enabled: role === 'Admin' })
-  const teams = useQuery({ queryKey: ['teams'], queryFn: api.teams, enabled: role === 'Admin' })
-  const quotas = useQuery({ queryKey: ['quotas'], queryFn: api.quotas, enabled: role === 'Admin' })
-  const sources = useQuery({ queryKey: ['compose-sources'], queryFn: api.composeSources })
-  const pools = useQuery({ queryKey: ['resource-pools'], queryFn: api.resourcePools, enabled: role === 'Admin' })
-  const topology = useQuery({ queryKey: ['topology'], queryFn: api.topology, enabled: role === 'Admin' && tab === 'pools' })
-  const audit = useQuery({ queryKey: ['audit'], queryFn: api.auditEvents, enabled: role === 'Admin' || role === 'Auditor' })
+  const can = (perm: string) => hasPerm(user, perm)
+  const allowedTabs = adminTabs.filter((item) => can(item.perm))
+  const allowedKey = allowedTabs.map((item) => item.id).join(',')
+  const [tab, setTab] = useState<AdminTab>(allowedTabs[0]?.id ?? 'users')
+  useEffect(() => {
+    const ids = allowedKey.split(',').filter(Boolean) as AdminTab[]
+    if (ids.length && !ids.includes(tab)) setTab(ids[0])
+  }, [allowedKey, tab])
+  const users = useQuery({ queryKey: ['users'], queryFn: api.users, enabled: can('admin.users') || can('admin.quotas') })
+  const teams = useQuery({ queryKey: ['teams'], queryFn: api.teams, enabled: can('admin.users') || can('admin.teams') || can('admin.quotas') })
+  const quotas = useQuery({ queryKey: ['quotas'], queryFn: api.quotas, enabled: can('admin.quotas') })
+  const sources = useQuery({ queryKey: ['compose-sources'], queryFn: api.composeSources, enabled: can('admin.compose') })
+  const pools = useQuery({ queryKey: ['resource-pools'], queryFn: api.resourcePools, enabled: can('admin.pools') })
+  const topology = useQuery({ queryKey: ['topology'], queryFn: api.topology, enabled: can('admin.pools') && tab === 'pools' })
+  const audit = useQuery({ queryKey: ['audit'], queryFn: api.auditEvents, enabled: can('admin.audit') })
   const me = useQuery({ queryKey: ['me'], queryFn: api.me })
   const [userForm, setUserForm] = useState({ username: '', password: '', email: '', role: 'User' as User['role'], teamId: '' })
   const [userCreated, setUserCreated] = useState('')
@@ -105,8 +126,8 @@ export function AdminPage({ role }: { role: User['role'] }) {
     })
   }
 
-  if (role !== 'Admin' && role !== 'Auditor') {
-    return <section className="placeholder-panel overview-enter"><p className="eyebrow">RESTRICTED</p><h2>需要管理员权限</h2></section>
+  if (!allowedTabs.length) {
+    return <section className="placeholder-panel overview-enter"><p className="eyebrow">RESTRICTED</p><h2>需要系统管理权限</h2></section>
   }
 
   return (
@@ -114,14 +135,14 @@ export function AdminPage({ role }: { role: User['role'] }) {
       <div className="section-heading">
         <div><p className="eyebrow">CONTROL PLANE</p><h2>系统管理</h2></div>
         <div className="mode-switch">
-          {(['users', 'teams', 'quotas', 'compose', 'pools', 'mig', 'audit'] as const).map((item) => (
-            <button key={item} className={tab === item ? 'active' : ''} onClick={() => setTab(item)}>
-              {{ users: '用户', teams: '团队', quotas: '配额', compose: 'Compose', pools: '资源池', mig: 'MIG切分', audit: '审计' }[item]}
+          {allowedTabs.map((item) => (
+            <button key={item.id} className={tab === item.id ? 'active' : ''} onClick={() => setTab(item.id)}>
+              {item.label}
             </button>
           ))}
         </div>
       </div>
-      {tab === 'users' && role === 'Admin' && (
+      {tab === 'users' && can('admin.users') && (
         <div className="admin-grid">
           <form className="admin-form" onSubmit={(event) => { event.preventDefault(); createUser.mutate() }}>
             <label>用户名<input value={userForm.username} onChange={(event) => setUserForm({ ...userForm, username: event.target.value })} /></label>
@@ -165,7 +186,7 @@ export function AdminPage({ role }: { role: User['role'] }) {
           </div>
         </div>
       )}
-      {tab === 'teams' && role === 'Admin' && (
+      {tab === 'teams' && can('admin.teams') && (
         <div className="admin-grid">
           <form className="admin-form" onSubmit={(event) => { event.preventDefault(); createTeam.mutate() }}>
             <label>团队名称<input value={teamName} onChange={(event) => setTeamName(event.target.value)} /></label>
@@ -174,7 +195,7 @@ export function AdminPage({ role }: { role: User['role'] }) {
           <div className="full-job-table">{(teams.data ?? []).map((team) => <div className="full-job-row" key={team.id}><span>{team.name}</span><span className="muted">{team.id.slice(0, 8)}</span></div>)}</div>
         </div>
       )}
-      {tab === 'quotas' && role === 'Admin' && (
+      {tab === 'quotas' && can('admin.quotas') && (
         <div className="admin-grid">
           <form className="admin-form" onSubmit={(event) => { event.preventDefault(); saveQuota.mutate() }}>
             <label>范围<select value={quotaForm.scopeType} onChange={(event) => setQuotaForm({ ...quotaForm, scopeType: event.target.value as 'user' | 'team', scopeId: '' })}><option value="user">用户</option><option value="team">团队</option></select></label>
@@ -212,7 +233,7 @@ export function AdminPage({ role }: { role: User['role'] }) {
           </div>
         </div>
       )}
-      {tab === 'compose' && role === 'Admin' && (
+      {tab === 'compose' && can('admin.compose') && (
         <div className="admin-grid">
           <form className="admin-form" onSubmit={(event) => { event.preventDefault(); createSource.mutate() }}>
             <label>名称<input value={sourceForm.name} onChange={(event) => setSourceForm({ ...sourceForm, name: event.target.value })} /></label>
@@ -240,7 +261,7 @@ export function AdminPage({ role }: { role: User['role'] }) {
           </div>
         </div>
       )}
-      {tab === 'pools' && role === 'Admin' && (
+      {tab === 'pools' && can('admin.pools') && (
         <div className="admin-grid">
           <form className="admin-form" onSubmit={(event) => { event.preventDefault(); createPool.mutate() }}>
             <label>名称<input value={poolName} onChange={(event) => setPoolName(event.target.value)} /></label>
@@ -269,7 +290,8 @@ export function AdminPage({ role }: { role: User['role'] }) {
           </div>
         </div>
       )}
-      {tab === 'mig' && role === 'Admin' && <MigSettings />}
+      {tab === 'mig' && can('admin.mig') && <MigSettings canReboot={can('admin.reboot')} />}
+      {tab === 'roles' && can('admin.roles') && <RolePermissions />}
       {tab === 'audit' && (
         <div className="full-job-table">
           {(audit.data ?? []).map((item) => (
