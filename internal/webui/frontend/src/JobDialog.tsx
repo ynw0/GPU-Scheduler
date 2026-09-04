@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, CircleGauge, Cpu, Gauge, HardDrive, LayoutGrid, X } from 'lucide-react'
 import { api } from './api'
-import { cpuSelectable, selectedGPUNuma } from './numa'
+import { cpuPercentOf, cpuSelectable, selectedGPUNuma, threadTone } from './numa'
 import { emptyImageFields, imageFieldsFromWorkload, JobImageFields, parseEnvironment, type ImageFields } from './JobImageFields'
 import { existingMigProfiles, gpuDeviceLabel, idleMigProfiles, migInstances, wholeGPUs } from './gpuLabel'
 import type { ImageWorkload, JobPlan, JobSpec, ResourceRequest, Topology, User } from './types'
@@ -28,9 +28,11 @@ function clampPriority(role: User['role'] | undefined, priority: JobSpec['priori
   return priority
 }
 
-export function NewJobDialog({ topology, freeGPUUUIDs, initialSpec, onClose }: {
+export function NewJobDialog({ topology, freeCPUIds, freeGPUUUIDs, cpuPercentById, initialSpec, onClose }: {
   topology?: Topology
+  freeCPUIds?: Set<number>
   freeGPUUUIDs?: Set<string>
+  cpuPercentById?: Record<string, number>
   initialSpec?: JobSpec
   onClose: () => void
 }) {
@@ -220,7 +222,10 @@ export function NewJobDialog({ topology, freeGPUUUIDs, initialSpec, onClose }: {
     })
     setPlan(undefined)
   }
-  const toggleCPU = (id: number) => setSelectedCPUs((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
+  const toggleCPU = (id: number) => {
+    setSelectedCPUs((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
+    setPlan(undefined)
+  }
   const composeReady = composeInput === 'catalog' ? composeSourceId : composeInput === 'path' ? composePath.trim() : composeContent.trim()
   const ready = Boolean(name.trim()) && (gpuKind !== 'mig' || Boolean(migProfile)) && (kind === 'image' ? imageFields.image && memoryGB > 0 : composeReady && serviceName.trim() && memoryGB > 0)
   const planCurrent = planKey === fingerprint()
@@ -352,9 +357,28 @@ export function NewJobDialog({ topology, freeGPUUUIDs, initialSpec, onClose }: {
               {cpuMode === 'auto-cores' ? <label>物理核数量<input type="number" min={1} value={cpuCount} onChange={(event) => setCpuCount(Number(event.target.value))} /></label> :
                 <div className="thread-choice-grid">{(topology?.cpus ?? []).map((cpu) => {
                   const allowed = cpuSelectable(cpu, allowedNuma)
-                  return <button disabled={!allowed} key={cpu.id} className={selectedCPUs.includes(cpu.id) ? 'thread-choice selected' : 'thread-choice'} onClick={() => toggleCPU(cpu.id)}>{cpu.id}<small>N{cpu.numaNode}</small></button>
+                  const percent = cpuPercentOf(cpuPercentById, cpu.id)
+                  const tone = threadTone(cpu.allocatable, Boolean(freeCPUIds?.has(cpu.id)), percent)
+                  const classes = ['thread-choice', tone]
+                  if (selectedCPUs.includes(cpu.id)) classes.push('selected')
+                  return (
+                    <button
+                      disabled={!allowed}
+                      key={cpu.id}
+                      className={classes.join(' ')}
+                      title={`CPU ${cpu.id} · ${percent.toFixed(0)}%`}
+                      onClick={() => toggleCPU(cpu.id)}
+                    >
+                      {cpu.id}<small>N{cpu.numaNode}</small>
+                    </button>
+                  )
                 })}</div>}
-              {cpuMode === 'manual-threads' && allowedNuma.size > 0 && <small className="field-hint">已按所选 GPU 限制为 NUMA {[...allowedNuma].sort((a, b) => a - b).join(', ')}</small>}
+              {cpuMode === 'manual-threads' && (
+                <small className="field-hint">
+                  绿空闲 · 黄已分配或中负载 · 红高负载（按实际 CPU 计算）
+                  {allowedNuma.size > 0 ? ` · 已按所选 GPU 限制为 NUMA ${[...allowedNuma].sort((a, b) => a - b).join(', ')}` : ''}
+                </small>
+              )}
             </fieldset>
           </div>
           <aside className="plan-column">
@@ -363,11 +387,11 @@ export function NewJobDialog({ topology, freeGPUUUIDs, initialSpec, onClose }: {
             {!plan && <div className="plan-empty"><CircleGauge size={30} /><span>填写资源后执行预检。资源不足时任务会进入队列。</span></div>}
             {plan && <>
               <div className={plan.schedulable ? 'plan-status ok' : 'plan-status error'}>{plan.schedulable ? <Check size={17} /> : <X size={17} />}{plan.schedulable ? '资源可立即调度' : '将进入排队'}</div>
-              <div className="plan-line"><span><Gauge size={15} />GPU</span><strong>{plan.gpuUuids.length ? plan.gpuUuids.map((uuid) => gpuDeviceLabel(topology, uuid)).join('、') : '无'}</strong></div>
-              <div className="plan-line"><span><Cpu size={15} />CPU</span><strong>{`${plan.cpuIds.length} 线程`}</strong></div>
-              <div className="plan-line"><span><LayoutGrid size={15} />NUMA</span><strong>{plan.numaNodes.join(', ') || '—'}</strong></div>
+              <div className="plan-line"><span><Gauge size={15} />GPU</span><strong>{(plan.gpuUuids ?? []).length ? (plan.gpuUuids ?? []).map((uuid) => gpuDeviceLabel(topology, uuid)).join('、') : '无'}</strong></div>
+              <div className="plan-line"><span><Cpu size={15} />CPU</span><strong>{`${(plan.cpuIds ?? []).length} 线程`}</strong></div>
+              <div className="plan-line"><span><LayoutGrid size={15} />NUMA</span><strong>{(plan.numaNodes ?? []).join(', ') || '—'}</strong></div>
               <div className="plan-line"><span><HardDrive size={15} />内存</span><strong>{`${memoryGB} GB`}</strong></div>
-              {plan.conflicts.map((conflict) => <div className="plan-conflict" key={conflict}>{conflict}</div>)}
+              {(plan.conflicts ?? []).map((conflict) => <div className="plan-conflict" key={conflict}>{conflict}</div>)}
               {(plan.warnings ?? []).map((warning) => <small className="field-hint" key={warning}>{warning}</small>)}
             </>}
             {plan && !planCurrent && <div className="plan-conflict">配置已经变化，请重新执行资源预检。</div>}

@@ -67,6 +67,13 @@ export interface Availability {
   memoryByNuma: Record<string, number>
 }
 
+export interface HostMetricSnapshot {
+  sampledAt: string
+  cpuPercentById?: Record<string, number>
+  memoryUsedBytes: number
+  memoryTotalBytes: number
+}
+
 export type JobAction = 'start' | 'pause' | 'resume' | 'stop' | 'retry'
 
 export interface Job {

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strconv"
+	"strings"
 
 	"gpu-scheduler/internal/domain"
 	"gpu-scheduler/internal/mig"
@@ -50,6 +52,15 @@ func (e *Engine) Plan(topology domain.Topology, availability domain.Availability
 	}
 	sort.Ints(plan.CPUIds)
 	sort.Ints(plan.NUMANodes)
+	if plan.CPUIds == nil {
+		plan.CPUIds = []int{}
+	}
+	if plan.GPUUUIDs == nil {
+		plan.GPUUUIDs = []string{}
+	}
+	if plan.NUMANodes == nil {
+		plan.NUMANodes = []int{}
+	}
 	plan.Schedulable = len(plan.Conflicts) == 0
 	return plan
 }
@@ -230,13 +241,15 @@ func selectCPUs(cpus []domain.LogicalCPU, available map[int]struct{}, allowedNod
 			return nil, nil, []string{"手动 CPU 线程数量与 cpuCount 不一致"}
 		}
 		nodes := make(map[int]struct{})
+		var taken []int
 		for _, id := range request.CPUIds {
 			cpu, exists := byID[id]
 			if !exists || !cpu.Allocatable {
 				return nil, nil, []string{fmt.Sprintf("CPU %d 不存在或不可用", id)}
 			}
 			if _, free := available[id]; !free {
-				return nil, nil, []string{fmt.Sprintf("CPU %d 已被占用", id)}
+				taken = append(taken, id)
+				continue
 			}
 			if len(allowedNodes) > 0 {
 				if _, local := allowedNodes[cpu.NUMANode]; !local {
@@ -244,6 +257,9 @@ func selectCPUs(cpus []domain.LogicalCPU, available map[int]struct{}, allowedNod
 				}
 			}
 			nodes[cpu.NUMANode] = struct{}{}
+		}
+		if len(taken) > 0 {
+			return nil, nil, []string{OccupiedThreadsMessage(taken)}
 		}
 		return append([]int(nil), request.CPUIds...), nodes, nil
 	}
@@ -351,4 +367,65 @@ func stringSet(values []string) map[string]struct{} {
 		result[value] = struct{}{}
 	}
 	return result
+}
+
+const BusyCPUPercent = 50
+
+func OccupiedThreadsMessage(ids []int) string {
+	sort.Ints(ids)
+	parts := make([]string, len(ids))
+	for i, id := range ids {
+		parts[i] = strconv.Itoa(id)
+	}
+	return fmt.Sprintf("当前选择的线程 %s 已被占用", strings.Join(parts, "、"))
+}
+
+func OccupiedSelectedThreads(request domain.ResourceRequest, availability domain.Availability, percent map[int]float64) []int {
+	if request.CPUMode != domain.CPUManualThreads {
+		return nil
+	}
+	available := intSet(availability.CPUIds)
+	seen := map[int]struct{}{}
+	var taken []int
+	for _, id := range request.CPUIds {
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
+		_, free := available[id]
+		if !free || percent[id] >= BusyCPUPercent {
+			taken = append(taken, id)
+		}
+	}
+	return taken
+}
+
+func CPURequestOf(spec domain.JobSpec) domain.ResourceRequest {
+	if spec.Workload.Kind == domain.WorkloadCompose {
+		for _, service := range spec.Workload.Services {
+			if strings.EqualFold(service.Class, "training") {
+				return service.Resources
+			}
+		}
+		if len(spec.Workload.Services) > 0 {
+			return spec.Workload.Services[0].Resources
+		}
+	}
+	return spec.Resources
+}
+
+func ReplaceOccupiedThreadConflict(plan *domain.JobPlan, taken []int) {
+	if len(taken) == 0 {
+		return
+	}
+	msg := OccupiedThreadsMessage(taken)
+	filtered := make([]string, 0, len(plan.Conflicts))
+	for _, item := range plan.Conflicts {
+		if strings.Contains(item, "已被占用") {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	plan.Conflicts = append([]string{msg}, filtered...)
+	plan.Schedulable = false
 }

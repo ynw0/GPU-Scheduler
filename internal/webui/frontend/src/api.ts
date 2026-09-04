@@ -1,6 +1,6 @@
 import type {
-  AuditEvent, Availability, ComposeSource, Health, ImageInfo, Job, JobAction, JobMetricSnapshot, JobPlan, JobSpec,
-  MIGLayout, Notification, Quota, ResourcePool, Team, Template, Topology, User, HostContainer,
+  AuditEvent, Availability, ComposeSource, Health, HostContainer, HostMetricSnapshot, ImageInfo, Job, JobAction,
+  JobMetricSnapshot, JobPlan, JobSpec, MIGLayout, Notification, Quota, ResourcePool, Team, Template, Topology, User,
 } from './types'
 
 export class APIError extends Error {
@@ -61,6 +61,7 @@ export const api = {
   health: () => request<Health>('/health'),
   topology: () => request<Topology>('/topology'),
   availability: () => request<Availability>('/resources/availability'),
+  hostMetrics: () => request<HostMetricSnapshot>('/metrics/host'),
   jobs: () => request<Job[]>('/jobs'),
   job: (id: string) => request<Job>(`/jobs/${id}`),
   images: () => request<ImageInfo[]>('/images'),

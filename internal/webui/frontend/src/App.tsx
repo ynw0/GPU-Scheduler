@@ -26,6 +26,7 @@ import { HostContainersPage } from './HostContainers'
 import { JobDetail } from './JobDetail'
 import { NewJobDialog } from './JobDialog'
 import { AccountMenu } from './AccountMenu'
+import { cpuPercentOf, threadTone } from './numa'
 import { hostMemoryBytes, type GPU, type Job, type JobAction, type JobSpec, type LogicalCPU, type NUMANode, type Topology } from './types'
 
 type Section = 'overview' | 'jobs' | 'host' | 'queue' | 'templates' | 'admin'
@@ -65,6 +66,7 @@ export function App() {
   const health = useQuery({ queryKey: ['health'], queryFn: api.health })
   const topology = useQuery({ queryKey: ['topology'], queryFn: api.topology, enabled: authenticated, staleTime: 10_000, refetchInterval: 15_000, retry: false })
   const availability = useQuery({ queryKey: ['availability'], queryFn: api.availability, enabled: authenticated })
+  const hostMetrics = useQuery({ queryKey: ['host-metrics'], queryFn: api.hostMetrics, enabled: authenticated, refetchInterval: 5000, retry: false })
   const jobs = useQuery({ queryKey: ['jobs'], queryFn: api.jobs, enabled: authenticated })
   const notifications = useQuery({ queryKey: ['notifications'], queryFn: api.notifications, enabled: authenticated })
   const templates = useQuery({ queryKey: ['templates'], queryFn: api.templates, enabled: authenticated && section === 'templates' })
@@ -79,7 +81,10 @@ export function App() {
       void queryClient.invalidateQueries({ queryKey: ['notifications'] })
     }
     source.addEventListener('job', refresh)
-    source.addEventListener('metrics', () => { void queryClient.invalidateQueries({ queryKey: ['availability'] }) })
+    source.addEventListener('metrics', () => {
+      void queryClient.invalidateQueries({ queryKey: ['availability'] })
+      void queryClient.invalidateQueries({ queryKey: ['host-metrics'] })
+    })
     source.addEventListener('topology', () => {
       void queryClient.invalidateQueries({ queryKey: ['topology'] })
       void queryClient.invalidateQueries({ queryKey: ['availability'] })
@@ -200,6 +205,7 @@ export function App() {
             topology={topology.data}
             freeCPUIds={new Set(availability.data?.cpuIds ?? [])}
             freeGPUUUIDs={new Set(availability.data?.gpuUuids ?? [])}
+            cpuPercentById={hostMetrics.data?.cpuPercentById}
             jobs={jobs.data ?? []}
             runningCount={occupying.length}
             queueCount={queued.length}
@@ -227,7 +233,9 @@ export function App() {
       {newJobOpen && (
         <NewJobDialog
           topology={topology.data}
+          freeCPUIds={new Set(availability.data?.cpuIds ?? [])}
           freeGPUUUIDs={new Set(availability.data?.gpuUuids ?? [])}
+          cpuPercentById={hostMetrics.data?.cpuPercentById}
           initialSpec={jobDraft}
           onClose={() => { setNewJobOpen(false); setJobDraft(undefined) }}
         />
@@ -332,6 +340,7 @@ function Overview({
   topology,
   freeCPUIds,
   freeGPUUUIDs,
+  cpuPercentById,
   jobs,
   runningCount,
   queueCount,
@@ -343,6 +352,7 @@ function Overview({
   topology?: Topology
   freeCPUIds: Set<number>
   freeGPUUUIDs: Set<string>
+  cpuPercentById?: Record<string, number>
   jobs: Job[]
   runningCount: number
   queueCount: number
@@ -393,6 +403,7 @@ function Overview({
               instances={(topology?.gpus ?? []).filter((gpu) => gpu.numaNode === node.id && Boolean(gpu.parentUuid))}
               freeCPUIds={freeCPUIds}
               freeGPUUUIDs={freeGPUUUIDs}
+              cpuPercentById={cpuPercentById}
             />
           ))}
           {!topology?.numaNodes.length && <EmptyTopology />}
@@ -423,13 +434,14 @@ function Overview({
   )
 }
 
-function NumaCard({ node, cpus, gpus, instances, freeCPUIds, freeGPUUUIDs }: {
+function NumaCard({ node, cpus, gpus, instances, freeCPUIds, freeGPUUUIDs, cpuPercentById }: {
   node: NUMANode
   cpus: LogicalCPU[]
   gpus: GPU[]
   instances: GPU[]
   freeCPUIds: Set<number>
   freeGPUUUIDs: Set<string>
+  cpuPercentById?: Record<string, number>
 }) {
   const cores = useMemo(() => {
     const map = new Map<number, LogicalCPU[]>()
@@ -452,9 +464,11 @@ function NumaCard({ node, cpus, gpus, instances, freeCPUIds, freeGPUUUIDs }: {
           {cores.map(([coreId, threads]) => (
             <div className="core-pair" key={coreId} title={`Core ${coreId} · CPU ${threads.map((cpu) => cpu.id).join(', ')}`}>
               <small>{coreId}</small>
-              {threads.sort((a, b) => a.id - b.id).map((thread) => (
-                <i key={thread.id} className={!thread.allocatable ? 'unavailable' : freeCPUIds.has(thread.id) ? 'free' : 'allocated'} />
-              ))}
+              {threads.sort((a, b) => a.id - b.id).map((thread) => {
+                const percent = cpuPercentOf(cpuPercentById, thread.id)
+                const tone = threadTone(thread.allocatable, freeCPUIds.has(thread.id), percent)
+                return <i key={thread.id} className={tone} title={`CPU ${thread.id} · ${percent.toFixed(0)}%`} />
+              })}
             </div>
           ))}
         </div>

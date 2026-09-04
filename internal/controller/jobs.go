@@ -31,7 +31,12 @@ func (s *Server) planJob(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 503, "Availability unavailable", err.Error())
 		return
 	}
-	writeJSON(w, 200, s.reservations.Preview(topology, availability, spec))
+	plan := s.reservations.Preview(topology, availability, spec)
+	if metrics, err := s.agent.HostMetrics(r.Context()); err == nil {
+		taken := scheduler.OccupiedSelectedThreads(scheduler.CPURequestOf(spec), availability, metrics.CPUPercentByID)
+		scheduler.ReplaceOccupiedThreadConflict(&plan, taken)
+	}
+	writeJSON(w, 200, plan)
 }
 
 func (s *Server) createJob(w http.ResponseWriter, r *http.Request) {

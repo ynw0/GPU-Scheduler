@@ -62,6 +62,7 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /api/v1/me/password", s.protected(http.HandlerFunc(s.changePassword), true))
 	s.mux.Handle("GET /api/v1/topology", s.protected(http.HandlerFunc(s.getTopology), false))
 	s.mux.Handle("GET /api/v1/resources/availability", s.protected(http.HandlerFunc(s.getAvailability), false))
+	s.mux.Handle("GET /api/v1/metrics/host", s.protected(http.HandlerFunc(s.getHostMetrics), false))
 	s.mux.Handle("GET /api/v1/images", s.protected(http.HandlerFunc(s.getImages), false))
 	s.mux.Handle("GET /api/v1/platform", s.protected(http.HandlerFunc(s.getPlatform), false))
 	s.mux.Handle("GET /api/v1/unmanaged-containers", s.protected(http.HandlerFunc(s.getUnmanaged), false))
@@ -204,6 +205,15 @@ func (s *Server) getAvailability(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, availability)
+}
+
+func (s *Server) getHostMetrics(w http.ResponseWriter, r *http.Request) {
+	snapshot, err := s.agent.HostMetrics(r.Context())
+	if err != nil {
+		writeProblem(w, 503, "Metrics unavailable", err.Error())
+		return
+	}
+	writeJSON(w, 200, snapshot)
 }
 
 func (s *Server) getImages(w http.ResponseWriter, r *http.Request) {
