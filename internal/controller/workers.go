@@ -260,7 +260,9 @@ func (s *Server) recordJobMetrics(ctx context.Context, snapshot domain.HostMetri
 			}
 			metric.Containers = append(metric.Containers, containerMetric)
 			metric.MemoryUsedBytes += containerMetric.MemoryUsedBytes
-			metric.MemoryLimitBytes += containerMetric.MemoryLimitBytes
+			if !domain.MemoryLimitUnset(containerMetric.MemoryLimitBytes) {
+				metric.MemoryLimitBytes += containerMetric.MemoryLimitBytes
+			}
 			metric.MemoryFailCount += containerMetric.MemoryFailCount
 			metric.OOMUnder = metric.OOMUnder || containerMetric.OOMUnder
 			metric.BlockIOReadBytes += containerMetric.BlockIOReadBytes
@@ -271,6 +273,9 @@ func (s *Server) recordJobMetrics(ctx context.Context, snapshot domain.HostMetri
 		}
 		if !complete {
 			continue
+		}
+		if domain.MemoryLimitUnset(metric.MemoryLimitBytes) {
+			metric.MemoryLimitBytes = snapshot.MemoryTotalBytes
 		}
 		metric.GPUs = filterJobGPUs(snapshot.GPUs, allocs)
 		_ = s.store.InsertMetricSnapshot(ctx, "job", job.ID, metric)

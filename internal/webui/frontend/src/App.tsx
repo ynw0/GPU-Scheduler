@@ -26,7 +26,7 @@ import { HostContainersPage } from './HostContainers'
 import { JobDetail } from './JobDetail'
 import { NewJobDialog } from './JobDialog'
 import { AccountMenu } from './AccountMenu'
-import type { GPU, Job, JobAction, JobSpec, LogicalCPU, NUMANode, Topology } from './types'
+import { hostMemoryBytes, type GPU, type Job, type JobAction, type JobSpec, type LogicalCPU, type NUMANode, type Topology } from './types'
 
 type Section = 'overview' | 'jobs' | 'host' | 'queue' | 'templates' | 'admin'
 
@@ -216,6 +216,7 @@ export function App() {
             role={me.data.role}
             templates={templates.data ?? []}
             gpus={topology.data?.gpus ?? []}
+            hostMemory={hostMemoryBytes(topology.data)}
             onOpenJob={setSelectedJobId}
             onUseTemplate={(spec) => { setJobDraft(spec); setNewJobOpen(true) }}
             onAction={(id, name) => action.mutate({ id, name })}
@@ -509,20 +510,21 @@ function EmptyTopology() {
 }
 
 function SectionContent({
-  section, jobs, role, templates, gpus, onOpenJob, onUseTemplate, onAction, canWrite,
+  section, jobs, role, templates, gpus, hostMemory, onOpenJob, onUseTemplate, onAction, canWrite,
 }: {
   section: Section
   jobs: Job[]
   role: import('./types').User['role']
   templates: import('./types').Template[]
   gpus: GPU[]
+  hostMemory: number
   onOpenJob: (id: string) => void
   onUseTemplate: (spec: JobSpec) => void
   onAction: (id: string, name: JobAction) => void
   canWrite: boolean
 }) {
   if (section === 'admin') return <AdminPage role={role} />
-  if (section === 'host') return <HostContainersPage role={role} gpus={gpus} canWrite={canWrite} onOpenJob={onOpenJob} onJobAction={onAction} />
+  if (section === 'host') return <HostContainersPage role={role} gpus={gpus} hostMemory={hostMemory} canWrite={canWrite} onOpenJob={onOpenJob} onJobAction={onAction} />
   if (section === 'templates') {
     return (
       <section className="workload-page overview-enter">

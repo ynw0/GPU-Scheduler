@@ -239,6 +239,15 @@ export interface ResourcePool {
   createdAt: string
 }
 
+export function hostMemoryBytes(topology?: { numaNodes?: Array<{ memoryBytes: number }> }): number {
+  return (topology?.numaNodes ?? []).reduce((sum, node) => sum + (node.memoryBytes || 0), 0)
+}
+
+export function realMemoryLimit(limit = 0, hostBytes = 0): number {
+  if (!limit || limit >= 2 ** 50) return hostBytes
+  return limit
+}
+
 export interface JobMetricSnapshot {
   sampledAt: string
   cpuPercentById?: Record<string, number>

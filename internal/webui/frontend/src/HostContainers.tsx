@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Box } from 'lucide-react'
 import { api } from './api'
-import type { GPU, HostContainer, JobAction, User } from './types'
+import { realMemoryLimit, type GPU, type HostContainer, type JobAction, type User } from './types'
 
 function formatBytes(value = 0): string {
   if (!value) return '0 GB'
@@ -84,11 +84,12 @@ function Status({ item }: { item: HostContainer }) {
   return <span className={`host-status ${status.kind}`}>{status.label}</span>
 }
 
-function Occupancy({ item, gpus }: { item: HostContainer; gpus: GPU[] }) {
+function Occupancy({ item, gpus, hostMemory }: { item: HostContainer; gpus: GPU[]; hostMemory: number }) {
   const live = item.state === 'running' || item.state === 'paused'
   const ids = item.cpuIds ?? []
-  const memory = item.memoryLimitBytes
-    ? `${formatBytes(item.memoryUsedBytes)} / ${formatBytes(item.memoryLimitBytes)}`
+  const limit = realMemoryLimit(item.memoryLimitBytes, hostMemory)
+  const memory = limit
+    ? `${formatBytes(item.memoryUsedBytes)} / ${formatBytes(limit)}`
     : item.memoryUsedBytes ? formatBytes(item.memoryUsedBytes) : '—'
   const pct = `${(item.cpuPercent ?? 0).toFixed(0)}%`
   const cpu = item.cpuUnbounded
@@ -131,10 +132,11 @@ function ContainerName({ item }: { item: HostContainer }) {
 }
 
 export function HostContainersPage({
-  role, gpus = [], canWrite, onOpenJob, onJobAction,
+  role, gpus = [], hostMemory = 0, canWrite, onOpenJob, onJobAction,
 }: {
   role: User['role']
   gpus?: GPU[]
+  hostMemory?: number
   canWrite: boolean
   onOpenJob: (id: string) => void
   onJobAction: (id: string, name: JobAction) => void
@@ -188,7 +190,7 @@ export function HostContainersPage({
                 <ContainerName item={item} />
                 <Tip label={cpu.label} detail={cpu.detail} />
                 <Tip label={gpu.label} detail={gpu.detail} />
-                <Occupancy item={item} gpus={gpus} />
+                <Occupancy item={item} gpus={gpus} hostMemory={hostMemory} />
                 <Status item={item} />
                 {item.managedJobId ? (
                   <button className="text-button" onClick={() => onOpenJob(item.managedJobId!)}>{item.jobName || item.managedJobId.slice(0, 8)}</button>
@@ -227,7 +229,7 @@ export function HostContainersPage({
                 <ContainerName item={item} />
                 <Tip label={cpu.label} detail={cpu.detail} />
                 <Tip label={gpu.label} detail={gpu.detail} />
-                <Occupancy item={item} gpus={gpus} />
+                <Occupancy item={item} gpus={gpus} hostMemory={hostMemory} />
                 <Status item={item} />
                 <span>
                   {admin ? (

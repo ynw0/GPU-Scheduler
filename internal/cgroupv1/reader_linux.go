@@ -95,6 +95,9 @@ func (r reader) read(pid int) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
+	if memoryLimit == 0 || memoryLimit >= 1<<62 {
+		memoryLimit = 0
+	}
 	memoryFailCount, err := readUint(filepath.Join(memoryRoot, "memory.failcnt"))
 	if err != nil {
 		return Snapshot{}, err

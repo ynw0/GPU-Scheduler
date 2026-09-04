@@ -508,3 +508,7 @@ type StreamEvent struct {
 	At      string `json:"at"`
 	Payload any    `json:"payload,omitempty"`
 }
+
+func MemoryLimitUnset(bytes uint64) bool {
+	return bytes == 0 || bytes >= 1<<62
+}

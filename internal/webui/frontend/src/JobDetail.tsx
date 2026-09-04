@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from './api'
 import { gpuDeviceLabel, gpuRequestLabel } from './gpuLabel'
-import type { Job, JobAction, JobSpec, ResourceRequest, Topology } from './types'
+import { hostMemoryBytes, realMemoryLimit, type Job, type JobAction, type JobSpec, type ResourceRequest, type Topology } from './types'
 
 function statusLabel(status: string): string {
   const labels: Record<string, string> = {
@@ -120,7 +120,7 @@ export function JobDetail({
             {job.spec && <JobSpecView spec={job.spec} />}
             <div className="job-metric-grid">
               <div className="plan-line"><span>CPU</span><strong>{cpuValues.length ? `${cpuAvg.toFixed(1)}%` : '—'}</strong></div>
-              <div className="plan-line"><span>内存</span><strong>{latest ? `${formatBytes(latest.memoryUsedBytes)} / ${formatBytes(latest.memoryLimitBytes)}` : '—'}</strong></div>
+              <div className="plan-line"><span>内存</span><strong>{latest ? `${formatBytes(latest.memoryUsedBytes)} / ${formatBytes(realMemoryLimit(latest.memoryLimitBytes, hostMemoryBytes(topology)))}` : '—'}</strong></div>
               <div className="plan-line"><span>块设备读取</span><strong>{latest ? formatBytes(latest.blockIoReadBytes) : '—'}</strong></div>
               <div className="plan-line"><span>块设备写入</span><strong>{latest ? formatBytes(latest.blockIoWriteBytes) : '—'}</strong></div>
               {latest?.oomUnder && <div className="plan-conflict">容器当前处于 OOM 状态</div>}

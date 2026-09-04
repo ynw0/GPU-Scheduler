@@ -44,6 +44,9 @@ func (s *Server) getUnmanaged(w http.ResponseWriter, r *http.Request) {
 		item := hostContainerFrom(claim, record, jobs[claim.ManagedJobID], now)
 		item.MemoryUsedBytes = claim.MemoryUsedBytes
 		item.MemoryLimitBytes = claim.MemoryLimitBytes
+		if domain.MemoryLimitUnset(item.MemoryLimitBytes) {
+			item.MemoryLimitBytes = hostMetrics.MemoryTotalBytes
+		}
 		item.CPUPercent = claim.CPUPercent
 		for _, uuid := range item.TrainingGPUUUIDs {
 			if gpu, ok := gpuByUUID[uuid]; ok {
